@@ -42,7 +42,7 @@ void myServoController::reset_joints() {
   read_joint_positions();
   float xf[NUM_MOTORS];
   for (int i = 0; i < NUM_MOTORS; i++) {
-    xf[i] = _joint_limits[i][0]; // _joint_limits = {{min, max}, ...}
+    xf[i] = max(2,_joint_limits[i][0]); // _joint_limits = {{min, max}, ...}
   }
   ramp2pos(xf, 25.0, 12.5);
   for (int i=0; i<NUM_MOTORS; i++) {
