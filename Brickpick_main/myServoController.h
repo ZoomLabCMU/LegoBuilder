@@ -59,9 +59,9 @@ private:
   void positional_PID(float PID_Cmd[NUM_MOTORS]);
   void clip_cmds(float qCmd[NUM_MOTORS]);
   // Note these constants were determined with error in mm
-  const float _cmdPos_Kp[NUM_MOTORS] = {700, 700, 700, 0};
+  const float _cmdPos_Kp[NUM_MOTORS] = {1500, 1500, 1500, 0};
   const float _cmdPos_Ki[NUM_MOTORS] = {0, 0, 0, 0};
-  const float _cmdPos_Kd[NUM_MOTORS] = {20, 20, 20, 0};
+  const float _cmdPos_Kd[NUM_MOTORS] = {30, 30, 30, 0};
   float _cmdPos_error[NUM_MOTORS];
   float _cmdPos_integral_error[NUM_MOTORS];
   float _cmdPos_derivative_error[NUM_MOTORS];

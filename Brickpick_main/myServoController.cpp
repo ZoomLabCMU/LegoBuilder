@@ -144,9 +144,10 @@ void myServoController::cmdVel(float q_dotCmd[]) {
 }
 
 void myServoController::positional_PID(float PID_Cmd[NUM_MOTORS]) {
+  int integral_error_max = 1.0;
   for (int i=0; i<NUM_MOTORS; i++) {
     float error = _joint_positionsCmd[i] - _joint_positions[i];
-    _cmdPos_integral_error[i] = _cmdPos_integral_error[i] + error * (0.001*_delta_millis);
+    _cmdPos_integral_error[i] = min(max(_cmdPos_integral_error[i] + error * (0.001*_delta_millis),-integral_error_max),integral_error_max);
     _cmdPos_derivative_error[i] = (error - _cmdPos_error[i]) / (0.001*_delta_millis);
     _cmdPos_error[i] = error;
   
