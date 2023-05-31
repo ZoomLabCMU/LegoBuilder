@@ -1,4 +1,6 @@
-#from UR5 import UR5
+#!/usr/bin/env python3
+
+from UR5 import UR5
 from BrickPick import BrickPick
 #import rospy
 #from geometry_msgs.msg import WrenchStamped, PoseStamped, Pose

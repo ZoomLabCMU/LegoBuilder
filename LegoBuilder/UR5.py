@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import rospy
 from easy_ur.srv import *
 import math
