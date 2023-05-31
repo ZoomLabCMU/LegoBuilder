@@ -11,7 +11,7 @@ import os
 import serial.tools.list_ports
 
 
-BP_COM_LINUX = "/dev/tty/ACM2"
+BP_COM_LINUX = "/dev/ttyACM0"
 BP_COM_PC = "COM10"
 BP_BAUDRATE = 115200
 
@@ -85,7 +85,11 @@ def main():
     print("Available COM Ports")
     serial.tools.list_ports.comports()
 
-    BP_info = (BP_COM_PC, BP_BAUDRATE)
+    if os.name == 'nt':
+        BP_info = (BP_COM_PC, BP_BAUDRATE)
+    else:
+        BP_info = (BP_COM_LINUX, BP_BAUDRATE)
+
     robot = LegoBuilder(BP_info)
 
     cmd_dict = {"H": robot.BP_help,
