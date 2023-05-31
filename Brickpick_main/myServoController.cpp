@@ -51,9 +51,11 @@ void myServoController::reset_joints() {
 }
 
 void myServoController::read_joint_positions() {
+  float alpha = 1.0;
   for (int i=0; i<NUM_MOTORS; i++) {
     int ADC_val = _adcs[i]->readADC_SingleEnded(_channels[i]);
-    _joint_positions[i] = ADC_COEFF*_joint_lengths[i]*ADC_val; //ADC_COEFF is bits for 1mm stroke
+    float curr_reading = ADC_COEFF*_joint_lengths[i]*ADC_val; //ADC_COEFF is bits for 1mm stroke
+    _joint_positions[i] = _joint_positions[i] * (1-alpha) + curr_reading * alpha; // Try to reduce some noise
     //multiply by max joint extension in m for ADC reading to meter conversion
   }
 }
@@ -144,7 +146,7 @@ void myServoController::cmdVel(float q_dotCmd[]) {
 }
 
 void myServoController::positional_PID(float PID_Cmd[NUM_MOTORS]) {
-  int integral_error_max = 1.0;
+  int integral_error_max = 0.25;
   for (int i=0; i<NUM_MOTORS; i++) {
     float error = _joint_positionsCmd[i] - _joint_positions[i];
     _cmdPos_integral_error[i] = min(max(_cmdPos_integral_error[i] + error * (0.001*_delta_millis),-integral_error_max),integral_error_max);
@@ -158,7 +160,7 @@ void myServoController::positional_PID(float PID_Cmd[NUM_MOTORS]) {
 }
 
 void myServoController::send_motorCmd() {
-  int min_cmd = 30;
+  int min_cmd = 60; // Power that won't break static friction
   for (int i=0; i<NUM_MOTORS; i++) {
     int motor_cmd_val = _motorCmd[i];
     motor_cmd_val = min(max(motor_cmd_val, -255), 255); // Clip to safe bounds
