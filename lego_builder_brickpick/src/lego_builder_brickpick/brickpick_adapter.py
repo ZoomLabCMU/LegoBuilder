@@ -1,20 +1,43 @@
 import numpy as np
 import serial
-from Brick import Brick
+from collections import deque
+
+from std_msgs.msg import String
 
 
-class BrickPick(object):
+class BrickPickAdapter(object):
     def __init__(self, COM_PORT, baudrate):
+        # TODO - Kinematics (load from config)
         self.TCP = np.array([8.0, -16.0, 238.6]) #Coordinate transform in mm to corner of fixed brick
+
+        # Comms
         self.ser = serial.Serial(COM_PORT, baudrate)
 
+        # Geometry/limits
         #joints: [q1: long_plate, q2: short_plate, q3: plunger]
         # ALL UNITS IN mm
         self.joint_lengths = np.array([50, 50, 10]) 
         self.joint_limits = np.array([[1.5,29.5], [1.5,29.5], [1.5,8.5]])
         
+        # Commands
+        self.command_queue = deque([], maxlen=10)
+
+        # TODO - Payload
         self.brick_stack = [] # 0-idx corresponds to brick nearest base
         self.stack_height = 0
+
+
+    ### ROS node callback functions ###
+    def push(self, msg: String):
+        cmd = msg # Extract command from message buffer
+        # Push to right side of deque
+        self.command_queue.append(cmd)
+
+    def execute_next_cmd(self):
+        # Pop from left side of deque
+        cmd = self.command_queue.popleft()
+        self.ser.write(cmd.encode())
+        pass
 
     ########### Serial Commands ##############
     def help(self):

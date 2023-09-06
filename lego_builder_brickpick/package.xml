@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<package format="2">
+    <name>lego_builder_brickpick</name>
+    <description>BrickPick end effector package</description>
+    <maintainer email="ctchang@andrew.cmu.edu">Chris Chang</maintainer>
+    <license>Apache License 2.0</license>
+
+    <exec_depend>rclpy</exec_depend>
+    <exec_depend>std_msgs</exec_depend>
+    <exec_depend>serial</exec_depend>
