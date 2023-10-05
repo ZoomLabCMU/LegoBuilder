@@ -111,7 +111,7 @@ void loop(){
           currentLine += c;      // add it to the end of the currentLine
         }
 
-        // Check to see if the client request was "GET /H" or "GET /L":
+        // Check to see if the client request was "GET /Brick" or "GET /Pick":
         if (currentLine.endsWith("GET /Brick")) {
           draw_brick();
         }
