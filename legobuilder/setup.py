@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'legobuilder_brickpick'
+package_name = 'legobuilder'
 
 setup(
     name=package_name,
@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'my_node = legobuilder_brickpick.my_node:main'
+            'my_node = legobuilder.my_node:main'
         ],
     },
 )

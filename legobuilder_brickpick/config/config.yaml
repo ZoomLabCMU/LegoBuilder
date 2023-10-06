@@ -1,8 +1,0 @@
-brickpick_adapter_node:
-  ros__parameters:
-    recv_cmd_channel: "brickpick/cmd"
-    execute_cmd_interval_s: 1.0
-
-brickpick_teleop_node:
-  ros__parameters:
-    send_cmd_channel: "brickpick/cmd"
