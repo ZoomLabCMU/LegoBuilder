@@ -1,3 +1,5 @@
+import os
+from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'legobuilder_brickpick'
@@ -10,17 +12,20 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*launch.py'))
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='chris',
+    maintainer='Chris Chang',
     maintainer_email='ctchang001@gmail.com',
     description='TODO: Package description',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'my_node = legobuilder_brickpick.my_node:main'
+            'hello_world = legobuilder_brickpick.hello_world_node:main',
+            'teleop = legobuilder_brickpick.brickpick_teleop_node:main',
+            'brickpick_adapter = legobuilder_brickpick.brickpick_adapter_node:main'
         ],
     },
 )
