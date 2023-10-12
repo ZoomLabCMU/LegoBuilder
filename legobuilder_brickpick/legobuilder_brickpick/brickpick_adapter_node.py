@@ -10,24 +10,31 @@ Node to handle the lego_builder interface to the BrickPick end effector
 import rclpy
 from rclpy.node import Node
 
-from std_msgs.msg import String
+from example_interfaces.srv import AddTwoInts
 
 class BrickPickAdapterNode(Node):
     def __init__(self):
-        super().__init__('brickpick_adapter_node')
+        super().__init__("brickpick_adapter_node")
 
         # Command subscriber
-        self.cmd_subscriber = self.create_subscription(
-            String,
+        self.cmd_subscriber = self.create_service(
+            AddTwoInts,
             'brickpick_cmd',
-            self.recv_cmd_callback,
-            10
+            self.recv_cmd_callback
         )
         #self.brickpick_adapter = lego_builder_brickpick.brickpick_adapter.BrickPickAdapter()
 
-    def recv_cmd_callback(self, msg : String):
-        self.get_logger().info(f'Recieved "{msg.data}"')
-        #self.brickpick_adapter.push(msg.data)
+    def recv_cmd_callback(self, request, response):
+        # push command to brickpick_adapter
+        a = request.a
+        b = request.b
+        # wait for command to finish/terminate
+        sum = a + b
+        # set response
+        response.sum = sum
+        self.get_logger().info(f'Incoming request\na: {request.a} b: {request.b}')
+
+        return response
 
 
 def main(args=None):

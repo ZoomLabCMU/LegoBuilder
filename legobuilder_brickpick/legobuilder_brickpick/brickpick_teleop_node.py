@@ -11,35 +11,41 @@ Up: left plate up
 import rclpy
 from rclpy.node import Node
 
-from std_msgs.msg import String
-import random
+from example_interfaces.srv import AddTwoInts
+
+import sys
 
 class BrickPickTeleopNode(Node):
 
     def __init__(self):
-        super().__init__('brickpick_teleop_node')
+        super().__init__('brickpick_teleop_node') # type: ignore
 
-        self.cmd_publisher = self.create_publisher(
-            String, 
-            "brickpick_cmd",
-            10
+        self.cmd_client = self.create_client(
+            AddTwoInts, 
+            "brickpick_cmd"
             )
-        timer_period = 1.0 # second
-        self.timer = self.create_timer(timer_period, self.timer_callback)
+        while not self.cmd_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('service not available, waiting again...')
+        self.cmd_request = AddTwoInts.Request()
 
-    def timer_callback(self):
-        msg = String()
-        msg.data = random.choice(["Up", "Down"])
-        self.cmd_publisher.publish(msg)
-        self.get_logger().info(f'Published "{msg.data}"')
+    def send_cmd_request(self, a: int, b: int) -> int | None:
+        self.cmd_request.a = a
+        self.cmd_request.b = b
+        self.future = self.cmd_client.call_async(self.cmd_request)
+        rclpy.spin_until_future_complete(self, self.future)
+        return self.future.result()
 
 def main(args=None):
     rclpy.init(args=args)
 
     brickpick_teleop_node = BrickPickTeleopNode()
     
-    rclpy.spin(brickpick_teleop_node)
- 
+    #rclpy.spin(brickpick_teleop_node)
+    response = brickpick_teleop_node.send_cmd_request(int(sys.argv[1]), int(sys.argv[2]))
+    brickpick_teleop_node.get_logger().info(
+        f'Command status: {response}'
+    )
+
     brickpick_teleop_node.destroy_node()
     rclpy.shutdown()
 

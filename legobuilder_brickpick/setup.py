@@ -25,7 +25,7 @@ setup(
         'console_scripts': [
             'hello_world = legobuilder_brickpick.hello_world_node:main',
             'teleop = legobuilder_brickpick.brickpick_teleop_node:main',
-            'brickpick_adapter = legobuilder_brickpick.brickpick_adapter_node:main'
+            'brickpick_adapter = legobuilder_brickpick.brickpick_adapter_node:main',
         ],
     },
 )
