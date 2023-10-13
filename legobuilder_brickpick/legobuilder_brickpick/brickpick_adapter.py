@@ -3,15 +3,17 @@ import serial
 from collections import deque
 
 from std_msgs.msg import String
+import requests
 
+
+IP_ADDRESS = "192.168.2.108"
 
 class BrickPickAdapter(object):
-    def __init__(self, COM_PORT, baudrate):
+    def __init__(self):
         # TODO - Kinematics (load from config)
         self.TCP = np.array([8.0, -16.0, 238.6]) #Coordinate transform in mm to corner of fixed brick
 
         # Comms
-        self.ser = serial.Serial(COM_PORT, baudrate)
 
         # Geometry/limits
         #joints: [q1: long_plate, q2: short_plate, q3: plunger]
@@ -28,6 +30,16 @@ class BrickPickAdapter(object):
 
 
     ### ROS node callback functions ###
+    def push_velocity(self, short_vel: float, long_vel: float, plunger_down: bool) -> String:
+        # TMP for demo
+        if short_vel > 0:
+            response = requests.get(f"http://{IP_ADDRESS}/Down")
+        if short_vel < 0:
+            response = requests.get(f"http://{IP_ADDRESS}/Up")
+        if short_vel == 0:
+            response = requests.get(f"http://{IP_ADDRESS}/Stop")
+        return "Null"
+
     def push(self, msg: String):
         cmd = msg # Extract command from message buffer
         # Push to right side of deque
