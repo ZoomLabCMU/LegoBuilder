@@ -14,7 +14,9 @@
 #include "BrickPick.h"
 #include <Adafruit_MotorShield.h>
 #include <arduino-timer.h>
+#include <Encoder.h>
 
+#include "Pins.h"
 // Create the motor shield object with the default I2C address
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 // Or, create it with a different I2C address (say for stacking)
@@ -25,8 +27,11 @@ Adafruit_DCMotor *short_motor = AFMS.getMotor(3);
 Adafruit_DCMotor *long_motor = AFMS.getMotor(4);
 // You can also make another motor on port M2
 //Adafruit_DCMotor *myOtherMotor = AFMS.getMotor(2);
+Encoder short_encoder(SHORT_ENC_A, SHORT_ENC_B);
+Encoder long_encoder(LONG_ENC_A, LONG_ENC_B);
 
-BrickPick brickpick = BrickPick(short_motor, long_motor);
+
+BrickPick brickpick = BrickPick(short_motor, long_motor, &short_encoder, &long_encoder);
 
 Timer<1, millis, BrickPick*> UI_timer;
 
@@ -44,7 +49,7 @@ void setup()
   // Initialize the UI (TFT display)
   init_UI();
   // millis
-  UI_timer.every(100, UI_timer_callback, &brickpick);
+  UI_timer.every(50, UI_timer_callback, &brickpick);
 
   // Init Motors
   if (!AFMS.begin()) {
@@ -55,6 +60,8 @@ void setup()
   Serial.println(F("Initialized"));
 }
 
+double enc = 0;
+double enc_prev = 0;
 void loop(){
   // View client requests for commands
   int return_code = handle_clients(brickpick);
@@ -63,9 +70,14 @@ void loop(){
   if (request != NULL) {
     return_code = brickpick->set_command(request);
   }
-  brickpick->update();
   */
-  //update_UI(brickpick);
+  brickpick.update();
+  enc_prev = enc;
+  enc = brickpick.get_long_plate_pos_mm();
+  if (enc != enc_prev) {
+    Serial.println(enc);
+  }
+
   UI_timer.tick();
 }
 

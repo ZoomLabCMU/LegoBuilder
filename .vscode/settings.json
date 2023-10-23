@@ -3,5 +3,17 @@
     "python.linting.pep8Enabled": true,
     "python.linting.pylintEnabled": true 
     },
-    "python.analysis.typeCheckingMode": "basic"
+    "python.analysis.typeCheckingMode": "basic",
+    "python.autoComplete.extraPaths": [
+        "/home/chris/ros2_ws/install/legobuilder_interfaces/lib/python3.10/site-packages",
+        "/home/chris/ros2_ws/install/legobuilder_brickpick/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/chris/ros2_ws/install/legobuilder_interfaces/lib/python3.10/site-packages",
+        "/home/chris/ros2_ws/install/legobuilder_brickpick/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ]
 }
