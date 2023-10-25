@@ -43,10 +43,10 @@ CTRL-C to quit
 # velocity state space
 # [short_vel, long_vel, plunger_down]
 velocityBindings = {
-    '[A': (-1, 0, False), #Up
-    '[B': (1, 0, False),  #Down
-    '[C': (0, -1, False), #Right
-    '[D': (0, 1, False),  #Left
+    '[A': (0, -1, False), #Up
+    '[B': (0, 1, False),  #Down
+    '[C': (-1, 0, False), #Right
+    '[D': (1, 0, False),  #Left
     ' ': (0, 0, True),        #Space
 }
 

@@ -6,7 +6,7 @@ from std_msgs.msg import String
 import requests
 
 
-IP_ADDRESS = "192.168.2.113"
+IP_ADDRESS = "192.168.2.116"
 
 class BrickPickAdapter(object):
     def __init__(self):
@@ -32,13 +32,15 @@ class BrickPickAdapter(object):
     ### ROS node callback functions ###
     def push_velocity(self, short_vel: float, long_vel: float, plunger_down: bool) -> String:
         # TMP for demo
-        if short_vel > 0:
-            response = requests.get(f"http://{IP_ADDRESS}/Down")
-        if short_vel < 0:
-            response = requests.get(f"http://{IP_ADDRESS}/Up")
-        if short_vel == 0:
-            response = requests.get(f"http://{IP_ADDRESS}/Stop")
-        return "Null"
+        if long_vel > 0:
+            u = 65535
+        elif long_vel < 0:
+            u = -65535
+        else:
+            u = 0
+        params = {'u': u}
+        response = requests.get(f"http://{IP_ADDRESS}/set_long_ctrl", params=params)
+        return "<TMP REPLY>"
 
     def push(self, msg: String):
         cmd = msg # Extract command from message buffer

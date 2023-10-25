@@ -23,8 +23,8 @@ Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 // Adafruit_MotorShield AFMS = Adafruit_MotorShield(0x61);
 
 // Select which 'port' M1, M2, M3 or M4. In this case, M1
-Adafruit_DCMotor *short_motor = AFMS.getMotor(3);
-Adafruit_DCMotor *long_motor = AFMS.getMotor(4);
+Adafruit_DCMotor *short_motor = AFMS.getMotor(4);
+Adafruit_DCMotor *long_motor = AFMS.getMotor(3);
 // You can also make another motor on port M2
 //Adafruit_DCMotor *myOtherMotor = AFMS.getMotor(2);
 Encoder short_encoder(SHORT_ENC_A, SHORT_ENC_B);
@@ -38,7 +38,9 @@ Timer<1, millis, BrickPick*> UI_timer;
 void setup()
 {
   Serial.begin(115200);
-  delay(10);
+  while (!Serial) {
+    ; // Wait for serial port to connect
+  }
   Serial.println("=== Basic Comms and UI test ===");
 
   // We start by connecting to a WiFi network
@@ -72,11 +74,6 @@ void loop(){
   }
   */
   brickpick.update();
-  enc_prev = enc;
-  enc = brickpick.get_long_plate_pos_mm();
-  if (enc != enc_prev) {
-    Serial.println(enc);
-  }
 
   UI_timer.tick();
 }
