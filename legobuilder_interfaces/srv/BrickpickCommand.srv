@@ -1,5 +1,6 @@
-int32 short_vel
-int32 long_vel
-bool plunger_down 
+string command      # "HTTP GET /{command}...
+int64 u             # "/set_*_ctrl?u={u}
+int64 target_brick  # "/set_*_target_brick?target_brick={target_brick}
+float64 target_mm        # "/set_*_target_mm?target_mm={target_mm}
 ---
 string status

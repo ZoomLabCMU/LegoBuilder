@@ -32,6 +32,16 @@ class BrickPick {
     double get_short_plate_pos_mm();
     double get_long_plate_pos_mm();
 
+    void set_short_target_brick(size_t brick);
+    void set_long_target_brick(size_t brick);
+    void set_short_target_mm(double target_mm);
+    void set_long_target_mm(double target_mm);
+
+    long get_short_plate_target();
+    long get_long_plate_target();
+    double get_short_plate_target_mm();
+    double get_long_plate_target_mm();
+
   private:
     // Objects
     Adafruit_DCMotor* _short_motor;

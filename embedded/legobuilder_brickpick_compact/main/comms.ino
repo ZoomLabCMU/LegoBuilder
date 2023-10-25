@@ -24,6 +24,10 @@ void init_server(const char *ssid, const char *password) {
   server.begin();
 }
 
+String get_ip_string() {
+  return WiFi.localIP().toString();
+}
+
 int handle_clients(BrickPick &brickpick) {
   // return 0 for client
   // return 1 for no client

@@ -43,9 +43,6 @@ void BrickPick::set_command(const char* request, size_t n) {
   if (s.startsWith("/set_long_ctrl")) {
     size_t i = s.indexOf("=");
     long u = s.substring(i+1, n).toInt();
-    Serial.println(s);
-    Serial.println(s.substring(i+1,n));
-    Serial.println(u);
     set_long_ctrl(u);
     _request_status = 0;
   }
@@ -55,7 +52,37 @@ void BrickPick::set_command(const char* request, size_t n) {
     set_short_ctrl(u);
     _request_status = 0;
   }
-
+  if (s.startsWith("/set_long_target_brick")) {
+    size_t i = s.indexOf("=");
+    size_t brick = s.substring(i+1, n).toInt();
+    set_long_target_brick(brick);
+    _request_status = 0;
+  }
+  if (s.startsWith("/set_short_target_brick")) {
+    size_t i = s.indexOf("=");
+    size_t brick = s.substring(i+1, n).toInt();
+    set_short_target_brick(brick);
+    _request_status = 0;
+  }
+  if (s.startsWith("/set_long_target_mm")) {
+    size_t i = s.indexOf("=");
+    size_t target_mm = s.substring(i+1, n).toInt();
+    set_long_target_mm(target_mm);
+    _request_status = 0;
+  }
+  if (s.startsWith("/set_short_target_mm")) {
+    size_t i = s.indexOf("=");
+    size_t target_mm = s.substring(i+1, n).toInt();
+    set_short_target_mm(target_mm);
+    _request_status = 0;
+  }
+  if (s.startsWith("/stop")) {
+    // What to do about PID here?
+    set_short_ctrl(0);
+    set_long_ctrl(0);
+    // Wait until no velocity?
+    _request_status = 0;
+  }
 }
 
 bool BrickPick::is_valid_request(const char* request, size_t n) {
@@ -63,7 +90,12 @@ bool BrickPick::is_valid_request(const char* request, size_t n) {
   String s = request;
   if (s.startsWith("/set_long_ctrl")) {return true;}
   if (s.startsWith("/set_short_ctrl")) {return true;}
+  if (s.startsWith("/set_long_target_brick")) {return true;}
+  if (s.startsWith("/set_short_target_brick")) {return true;}
+  if (s.startsWith("/set_long_target_mm")) {return true;}
+  if (s.startsWith("/set_short_target_mm")) {return true;}
   if (s.startsWith("/stop")) {return true;}
+
   if (s.startsWith("/reset")) {return true;}
   return false;
 }
@@ -130,10 +162,54 @@ long BrickPick::get_long_plate_pos() {
   return _long_plate_pos;
 }
 
+long BrickPick::get_short_plate_target() {
+  return _short_plate_target;
+}
+
+long BrickPick::get_long_plate_target() {
+  return _long_plate_target;
+}
+
 double BrickPick::get_short_plate_pos_mm() {
   return _short_plate_pos_mm;
 }
 
 double BrickPick::get_long_plate_pos_mm() {
   return _long_plate_pos_mm;
+}
+
+double BrickPick::get_short_plate_target_mm() {
+  return get_short_plate_target() * ENCODER2LENGTH;
+}
+
+double BrickPick::get_long_plate_target_mm() {
+  return get_long_plate_target() * ENCODER2LENGTH;
+}
+
+void BrickPick::set_long_target_brick(size_t brick) {
+  double BRICK_HEIGHT_MM = 9.6;
+  size_t BRICK_MAX = 5;
+  double HEIGHT_OFFSET_MM = -2.0;
+  brick = min(brick, BRICK_MAX);
+  set_long_target_mm(BRICK_HEIGHT_MM * brick + HEIGHT_OFFSET_MM);
+}
+
+void BrickPick::set_long_target_mm(double target_mm) {
+  // add limiting here later
+  long target = LENGTH2ENCODER * target_mm;
+  _long_plate_target = target;
+}
+
+void BrickPick::set_short_target_brick(size_t brick) {
+  double BRICK_HEIGHT_MM = 9.6;
+  size_t BRICK_MAX = 5;
+  double HEIGHT_OFFSET_MM = -2.0;
+  brick = min(brick, BRICK_MAX);
+  set_short_target_mm(BRICK_HEIGHT_MM * brick + HEIGHT_OFFSET_MM);
+}
+
+void BrickPick::set_short_target_mm(double target_mm) {
+  // add limiting here later
+  long target = LENGTH2ENCODER * target_mm;
+  _short_plate_target = target;
 }

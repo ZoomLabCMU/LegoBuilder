@@ -58,12 +58,13 @@ void setup()
     Serial.println("Could not find Motor Shield. Check wiring.");
     while(1);
   }
-
+  pinMode(SHORT_ENC_B, INPUT_PULLUP);
   Serial.println(F("Initialized"));
+  brickpick.set_long_target_brick(2);
+  brickpick.set_short_target_brick(1);
 }
 
-double enc = 0;
-double enc_prev = 0;
+size_t tmp_brick = 0;
 void loop(){
   // View client requests for commands
   int return_code = handle_clients(brickpick);
@@ -74,13 +75,14 @@ void loop(){
   }
   */
   brickpick.update();
-
   UI_timer.tick();
 }
 
 bool UI_timer_callback(BrickPick *brickpick) {
   // Timer wants pointers to be passed as input
   update_UI(*brickpick);
+  //tmp_brick = (tmp_brick + 1) % 5;
+  //brickpick->set_long_target_brick(tmp_brick);
   return true;
 }
 

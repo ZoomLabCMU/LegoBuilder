@@ -15,7 +15,7 @@ from legobuilder_brickpick.brickpick_adapter import BrickPickAdapter
 
 class BrickPickAdapterNode(Node):
     def __init__(self):
-        super().__init__("brickpick_adapter_node")
+        super().__init__("brickpick_adapter_node") #type: ignore
 
         # Command subscriber
         self.cmd_subscriber = self.create_service(
@@ -25,17 +25,15 @@ class BrickPickAdapterNode(Node):
         )
         self.brickpick_adapter = BrickPickAdapter()
 
-    def recv_cmd_callback(self, request, response):
+    def recv_cmd_callback(self, request : BrickpickCommand.Request, response : BrickpickCommand.Response):
         # push command to brickpick_adapter
-        short_vel = request.short_vel
-        long_vel = request.long_vel
-        plunger_down = request.plunger_down
+ 
         # wait for command to finish/terminate
-        status = self.brickpick_adapter.push_velocity(short_vel, long_vel, plunger_down)
+        status = self.brickpick_adapter.push_cmd(request)
         # set response
         response.status = status
         self.get_logger().info(
-            f'Incoming request\nshort_vel: {request.short_vel} long_vel: {request.long_vel} plunger_down: {request.plunger_down}'
+            f'Incoming request\ncommand: {request.command} u: {request.u} target_brick: {request.target_brick}'
         )
 
         return response

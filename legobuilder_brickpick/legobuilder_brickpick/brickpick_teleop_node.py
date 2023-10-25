@@ -29,6 +29,7 @@ else:
     import termios
     import tty
 
+
 help_msg = """
 This node takes keypresses from the keyboard and publishes them as BrickpickCommand service requests
 -------------------------
@@ -43,11 +44,18 @@ CTRL-C to quit
 # velocity state space
 # [short_vel, long_vel, plunger_down]
 velocityBindings = {
-    '[A': (0, -1, False), #Up
-    '[B': (0, 1, False),  #Down
-    '[C': (-1, 0, False), #Right
-    '[D': (1, 0, False),  #Left
-    ' ': (0, 0, True),        #Space
+    '[A': {'command': '/set_long_ctrl', 'u': -1},   #Up
+    '[B': {'command': '/set_long_ctrl', 'u': 1},    #Down
+    '[C': {'command': '/set_short_ctrl', 'u': -1},  #Right
+    '[D': {'command': '/set_short_ctrl', 'u': 1},   #Left
+}
+
+positionBindings = {
+    '1': {'command': '/set_long_target_brick', 'target_brick': 1},  #Up
+    '2': {'command': '/set_long_target_brick', 'target_brick': 2},  #Down
+    '3': {'command': '/set_long_target_brick', 'target_brick': 3},  #Right
+    '4': {'command': '/set_long_target_brick', 'target_brick': 4},  #Left
+    '5': {'command': '/set_long_target_brick', 'target_brick': 5},  #Space
 }
 
 
@@ -60,20 +68,18 @@ class BrickPickTeleopNode(Node):
             BrickpickCommand, 
             "brickpick_cmd"
             )
+        self.velocity_scalar = 65535
         while not self.cmd_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('service not available, waiting again...')
-        self.cmd_request = BrickpickCommand.Request()
 
-    def send_cmd_request(self, short_vel: int, long_vel: int, plunger_down: bool) -> int | None:
-        self.cmd_request.short_vel = short_vel
-        self.cmd_request.long_vel = long_vel
-        self.cmd_request.plunger_down = plunger_down
+    def send_cmd_request(self, cmd_request : BrickpickCommand.Request) -> int | None:
+        #Blocking and waiting???
 
         #self.future = self.cmd_client.call_async(self.cmd_request)
         #rclpy.spin_until_future_complete(self, self.future)
         #return self.future.result()
 
-        return self.cmd_client.call(self.cmd_request)
+        return self.cmd_client.call(cmd_request)
 
 def getKey(settings):
     if sys.platform == 'win32':
@@ -111,22 +117,31 @@ def main(args=None):
 
     try:
         print(help_msg)
-
+        velocity_scalar = 65535
         while True:
             key = getKey(settings)
             if key in velocityBindings.keys():
-                short_vel = velocityBindings[key][0]
-                long_vel = velocityBindings[key][1]
-                plunger_down = velocityBindings[key][2]
+                command = velocityBindings[key]['command']
+                u = velocityBindings[key]['u'] * velocity_scalar
+
+                command_request = BrickpickCommand.Request()
+                command_request.command = command
+                command_request.u = u
+            elif key in positionBindings.keys():
+                command = positionBindings[key]['command']
+                target_brick = positionBindings[key]['target_brick']
+
+                command_request = BrickpickCommand.Request()
+                command_request.command = command
+                command_request.target_brick = target_brick
             else:
-                short_vel = 0
-                long_vel = 0
-                plunger_down = False
+                command_request = BrickpickCommand.Request()
+                command_request.command = '/stop'
                 if (key == '\x03'):
                     break
-            print(f"Requested controls [{key}]: (short_vel: {short_vel}, long_vel: {long_vel}, plunger_down: {plunger_down})")
+            print(f"Requested controls [{key}]: (request: {command_request}")
 
-            response = brickpick_teleop_node.send_cmd_request(short_vel, long_vel, plunger_down)
+            response = brickpick_teleop_node.send_cmd_request(command_request)
             brickpick_teleop_node.get_logger().info(
                 f'Command status: {response}'
             )
@@ -134,10 +149,10 @@ def main(args=None):
         print(e)
 
     finally:
-        short_vel = 0
-        long_vel = 0
-        plunger_down = False
-        response = brickpick_teleop_node.send_cmd_request(short_vel, long_vel, plunger_down)
+        #CHANGE THIS TO STOP LATER
+        command_request = BrickpickCommand.Request()
+        command_request.command = '/stop'
+        response = brickpick_teleop_node.send_cmd_request(command_request)
         brickpick_teleop_node.get_logger().info(
             f'Command status: {response}'
         )
