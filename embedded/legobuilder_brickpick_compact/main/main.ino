@@ -14,6 +14,7 @@
 #include "BrickPick.h"
 #include <Adafruit_MotorShield.h>
 #include <arduino-timer.h>
+
 #include <Encoder.h>
 
 #include "Pins.h"
@@ -30,10 +31,9 @@ Adafruit_DCMotor *long_motor = AFMS.getMotor(3);
 Encoder short_encoder(SHORT_ENC_A, SHORT_ENC_B);
 Encoder long_encoder(LONG_ENC_A, LONG_ENC_B);
 
-
 BrickPick brickpick = BrickPick(short_motor, long_motor, &short_encoder, &long_encoder);
 
-Timer<1, millis, BrickPick*> UI_timer;
+Timer<3, millis, BrickPick*> update_timer;
 
 void setup()
 {
@@ -50,18 +50,23 @@ void setup()
   
   // Initialize the UI (TFT display)
   init_UI();
-  // millis
-  UI_timer.every(50, UI_timer_callback, &brickpick);
 
+  // Long state est
+  attachInterrupt(digitalPinToInterrupt(LONG_ENC_A), update_long_count, CHANGE);
+  // encoder reading pins
+  pinMode(LONG_ENC_A, INPUT);
+  pinMode(LONG_ENC_B, INPUT);
+
+  // millis
+  update_timer.every(100, update_UI_callback, &brickpick);
+  update_timer.every(100, plotting_callback, &brickpick);
+  update_timer.every(1, update_brickpick_callback, &brickpick);
   // Init Motors
   if (!AFMS.begin()) {
     Serial.println("Could not find Motor Shield. Check wiring.");
     while(1);
   }
-  pinMode(SHORT_ENC_B, INPUT_PULLUP);
   Serial.println(F("Initialized"));
-  brickpick.set_long_target_brick(2);
-  brickpick.set_short_target_brick(1);
 }
 
 size_t tmp_brick = 0;
@@ -74,15 +79,50 @@ void loop(){
     return_code = brickpick->set_command(request);
   }
   */
-  brickpick.update();
-  UI_timer.tick();
+  update_timer.tick();
 }
 
-bool UI_timer_callback(BrickPick *brickpick) {
+bool update_brickpick_callback(BrickPick *brickpick) {
+  brickpick->update();
+  return true;
+}
+
+bool update_UI_callback(BrickPick *brickpick) {
   // Timer wants pointers to be passed as input
   update_UI(*brickpick);
   //tmp_brick = (tmp_brick + 1) % 5;
   //brickpick->set_long_target_brick(tmp_brick);
   return true;
+}
+
+bool plotting_callback(BrickPick *brickpick) {
+  double x = brickpick->get_long_plate_pos_mm();
+  double target = brickpick->get_long_plate_target_mm();
+  long u_l = brickpick->get_long_plate_ctrl();
+
+  Serial.print("x:");
+  Serial.print(x);
+  Serial.print(",");
+  Serial.print("target:");
+  Serial.print(target);
+  Serial.print(",");
+  Serial.print("u_l:");
+  Serial.print(u_l);
+  Serial.println();
+  return true;
+}
+
+void update_long_count() {
+  if (digitalRead(LONG_ENC_A) == HIGH) {
+    if (digitalRead(LONG_ENC_B) == LOW)
+      brickpick.long_plate_pos_incr();
+    else
+      brickpick.long_plate_pos_decr();
+  } else {
+    if (digitalRead(LONG_ENC_B) == LOW)
+      brickpick.long_plate_pos_decr();
+    else
+      brickpick.long_plate_pos_incr();
+  }
 }
 

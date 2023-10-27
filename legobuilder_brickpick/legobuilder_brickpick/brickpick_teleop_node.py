@@ -67,8 +67,7 @@ class BrickPickTeleopNode(Node):
         self.cmd_client = self.create_client(
             BrickpickCommand, 
             "brickpick_cmd"
-            )
-        self.velocity_scalar = 65535
+        )
         while not self.cmd_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('service not available, waiting again...')
 
@@ -117,7 +116,7 @@ def main(args=None):
 
     try:
         print(help_msg)
-        velocity_scalar = 65535
+        velocity_scalar = 65535 / 4
         while True:
             key = getKey(settings)
             if key in velocityBindings.keys():
@@ -126,7 +125,7 @@ def main(args=None):
 
                 command_request = BrickpickCommand.Request()
                 command_request.command = command
-                command_request.u = u
+                command_request.u = int(u)
             elif key in positionBindings.keys():
                 command = positionBindings[key]['command']
                 target_brick = positionBindings[key]['target_brick']
