@@ -5,7 +5,7 @@
 #include <Adafruit_MotorShield.h>
 #include <Encoder.h>
 
-const int ENCODER_RESOLUTION = 12;                                                      // clicks / enc rev
+const int ENCODER_RESOLUTION = 6;                                                      // clicks / enc rev
 const int GEAR_RATIO = 10;                                                              // enc rev / screw rev
 const int SCREW_PITCH = 3;                                                              //Note this needs to be measured more accurately (mm/screw rev)
 const double ENCODER2LENGTH = (double)SCREW_PITCH / (ENCODER_RESOLUTION * GEAR_RATIO);  // (mm/click)
@@ -198,9 +198,9 @@ void BrickPick::set_long_ctrl(long u) {
   _long_motor->setSpeedFine(speed);
 
   if (u > 0) {
-    _long_motor->run(BACKWARD);
-  } else if (u < 0) {
     _long_motor->run(FORWARD);
+  } else if (u < 0) {
+    _long_motor->run(BACKWARD);
   } else {  // u == 0
     _long_motor->run(RELEASE);
   }

@@ -38,9 +38,7 @@ Timer<3, millis, BrickPick*> update_timer;
 void setup()
 {
   Serial.begin(115200);
-  while (!Serial) {
-    ; // Wait for serial port to connect
-  }
+  delay(1000);
   Serial.println("=== Basic Comms and UI test ===");
 
   // We start by connecting to a WiFi network

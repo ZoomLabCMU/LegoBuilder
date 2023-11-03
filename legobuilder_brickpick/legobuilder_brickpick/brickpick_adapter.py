@@ -8,7 +8,7 @@ import requests
 from legobuilder_interfaces.srv import BrickpickCommand
 
 
-IP_ADDRESS = "192.168.2.116"
+IP_ADDRESS = "192.168.2.107"
 
 class BrickPickAdapter(object):
     def __init__(self):
