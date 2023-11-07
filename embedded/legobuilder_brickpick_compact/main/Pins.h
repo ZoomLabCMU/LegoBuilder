@@ -7,4 +7,6 @@
 #define SHORT_ENC_A 12
 #define SHORT_ENC_B 13
 
+#define PLUNGER_POT 18
+
 #endif

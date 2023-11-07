@@ -33,7 +33,7 @@ class BrickPickAdapterNode(Node):
         # set response
         response.status = status
         self.get_logger().info(
-            f'Incoming request\ncommand: {request.command} u: {request.u} target_brick: {request.target_brick}'
+            f'Incoming request\ncommand: {request.command} u: {request.u} target_brick: {request.target_brick} plunger_target: {request.plunger_target}'
         )
 
         return response

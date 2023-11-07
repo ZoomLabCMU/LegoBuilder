@@ -56,6 +56,8 @@ positionBindings = {
     '3': {'command': '/set_long_target_brick', 'target_brick': 3},  #Right
     '4': {'command': '/set_long_target_brick', 'target_brick': 4},  #Left
     '5': {'command': '/set_long_target_brick', 'target_brick': 5},  #Space
+    'o': {'command': '/set_plunger', 'plunger_target': 0}, #plunger up
+    'p': {'command': '/set_plunger', 'plunger_target': 1} #plunger down
 }
 
 
@@ -128,11 +130,15 @@ def main(args=None):
                 command_request.u = int(u)
             elif key in positionBindings.keys():
                 command = positionBindings[key]['command']
-                target_brick = positionBindings[key]['target_brick']
-
                 command_request = BrickpickCommand.Request()
                 command_request.command = command
-                command_request.target_brick = target_brick
+                if 'target_brick' in positionBindings[key]:
+                    target_brick = positionBindings[key]['target_brick']
+                    command_request.target_brick = target_brick
+                if 'plunger_target' in positionBindings[key]:
+                    plunger_target = positionBindings[key]['plunger_target']
+                    command_request.plunger_target = plunger_target
+
             else:
                 command_request = BrickpickCommand.Request()
                 command_request.command = '/stop'
@@ -148,7 +154,6 @@ def main(args=None):
         print(e)
 
     finally:
-        #CHANGE THIS TO STOP LATER
         command_request = BrickpickCommand.Request()
         command_request.command = '/stop'
         response = brickpick_teleop_node.send_cmd_request(command_request)

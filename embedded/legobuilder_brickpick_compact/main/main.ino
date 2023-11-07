@@ -26,12 +26,9 @@ Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 // Select which 'port' M1, M2, M3 or M4. In this case, M1
 Adafruit_DCMotor *short_motor = AFMS.getMotor(4);
 Adafruit_DCMotor *long_motor = AFMS.getMotor(3);
-// You can also make another motor on port M2
-//Adafruit_DCMotor *myOtherMotor = AFMS.getMotor(2);
-Encoder short_encoder(SHORT_ENC_A, SHORT_ENC_B);
-Encoder long_encoder(LONG_ENC_A, LONG_ENC_B);
+Adafruit_DCMotor *plunger_motor = AFMS.getMotor(2);
 
-BrickPick brickpick = BrickPick(short_motor, long_motor, &short_encoder, &long_encoder);
+BrickPick brickpick = BrickPick(short_motor, long_motor, plunger_motor);
 
 Timer<3, millis, BrickPick*> update_timer;
 
@@ -94,6 +91,7 @@ bool update_UI_callback(BrickPick *brickpick) {
 }
 
 bool plotting_callback(BrickPick *brickpick) {
+  return true;
   double x = brickpick->get_long_plate_pos_mm();
   double target = brickpick->get_long_plate_target_mm();
   long u_l = brickpick->get_long_plate_ctrl();

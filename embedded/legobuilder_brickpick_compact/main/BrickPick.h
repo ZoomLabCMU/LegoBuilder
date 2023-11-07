@@ -17,7 +17,7 @@ class BrickPick {
     // Unitless variables will be in their native units (e.g _pos and encoder ticks)
     // Encoders: encoder ticks (signed long)
     // Motors: control value -100->100 (double)
-    BrickPick(Adafruit_DCMotor* short_motor, Adafruit_DCMotor* long_motor, Encoder* short_encoder, Encoder* long_encoder);
+    BrickPick(Adafruit_DCMotor* short_motor, Adafruit_DCMotor* long_motor, Adafruit_DCMotor* plunger_motor);
 
     void set_command(const char* request, size_t n);
     bool is_valid_request(const char* request, size_t n);
@@ -44,8 +44,7 @@ class BrickPick {
     // Objects
     Adafruit_DCMotor* _short_motor;
     Adafruit_DCMotor* _long_motor;
-    Encoder* _short_encoder;
-    Encoder* _long_encoder;
+    Adafruit_DCMotor* _plunger_motor;
 
     // Safety/Boundaries
     const uint16_t _release_tolerance = 65535 / 100; // 1% of maximum value
@@ -89,11 +88,28 @@ class BrickPick {
     long _e_sum_long = 0;
     long _e_sum_long_max = 0xFFFFFFFF;
     
-    double _Kp_s = 0;
+    double _Kp_s = 100;
     double _Ki_s = 0;
     double _Kd_s = 0;
-
+    long _e_short = 0;
+    long _e_short_prev = 0;
+    long _de_short = 0;
+    long _e_sum_short = 0;
+    long _e_sum_short_max = 0xFFFFFFFF;
+    
     void reset_long_PID();
+    void reset_short_PID();
+
+    // Plunger
+    size_t _plunger_target = 0; // 0 is up, 1 is down
+    const static size_t _plunger_buf_n = 15;
+    long _plunger_ctrls[_plunger_buf_n] = {0};
+    int _plunger_positions[_plunger_buf_n] = {0};
+    bool _plunger_stalled;
+    double _Kp_plunger = 10.0;
+
+    void set_plunger_target(size_t i);
+    void update_plunger_ctrls();
 };
 
 #endif

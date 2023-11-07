@@ -8,7 +8,7 @@ import requests
 from legobuilder_interfaces.srv import BrickpickCommand
 
 
-IP_ADDRESS = "192.168.2.107"
+IP_ADDRESS = "192.168.2.109"
 
 class BrickPickAdapter(object):
     def __init__(self):
@@ -38,5 +38,8 @@ class BrickPickAdapter(object):
             response = requests.get(f"http://{IP_ADDRESS}/set_short_target_mm", params=params)
         elif request.command == "/stop":
             response = requests.get(f"http://{IP_ADDRESS}/stop")
+        elif request.command == "/set_plunger":
+            params = {'plunger_target': request.plunger_target}
+            response = requests.get(f"http://{IP_ADDRESS}/set_plunger", params=params)
         return "<TMP REPLY>" #type: ignore
 
