@@ -31,7 +31,56 @@ String get_ip_string() {
 int handle_clients(BrickPick &brickpick) {
   // return 0 for client
   // return 1 for no client
-  WiFiClient client = server.available();   // listen for incoming clients
+
+  // I use a static client and command flag/variable in order to asynchronously wait for 
+  //      blocking commands to complete while leaving a minimal timing footprint so PID & other updates can run
+  //      on timers in the main loop. A future iteration might replace this with the AsyncTCP library to do this
+  //      in a less messy fashion.
+  static WiFiClient client = server.available();   // listen for incoming clients
+  static bool command_complete = true;
+  static String active_command = "";
+
+  if (!command_complete) { // Check progress on command, send response on termination
+    int command_status = brickpick.check_command_status(active_command);
+    char response_buf[50];
+    switch (command_status) {
+      case 0: // command complete
+        // Send complete response to client
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-Type: text/plain");
+        client.println("Connection: close");
+        client.println();
+        sprintf(response_buf, "Command: {%s} complete!", active_command);
+        client.println(response_buf);
+        // close the connection:
+        client.stop();
+        Serial.println("Client Disconnected.");
+        // Reset command flag
+        command_complete = true;
+        active_command = "";
+        break;
+      case 1: // command pending
+        break;
+      case 2: // command failed (not completely implemented)
+        // Send failed reply to client
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-Type: text/plain");
+        client.println("Connection: close");
+        client.println();
+        sprintf(response_buf, "Command: {%s} failed!", active_command);
+        client.println(response_buf);
+        // close the connection:
+        client.stop();
+        Serial.println("Client Disconnected.");
+        // reset command flag
+        command_complete = true;
+        active_command = "";
+        break;
+    }
+    return 1; // Exit loop and wait for next call to get new clients
+  } else {
+    client = server.available();   // listen for incoming clients
+  }
 
   if (client) {                             // if you get a client,
     Serial.println("New Client.");           // print a message out the serial port
@@ -48,21 +97,11 @@ int handle_clients(BrickPick &brickpick) {
           // execute the request and block until completed
           // send a response
           if (currentLine.length() == 0) {
-            // Set new command and wait for OK or ERROR codes
+            // Set new command
             brickpick.set_command(request.c_str(), request.length());
+            command_complete = false;
+            active_command = request;
 
-            // Needs expansion when position commands are added
-            while (!brickpick.request_complete()) {
-              delayMicroseconds(10);
-            }
-
-            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
-            // and a content-type so the client knows what's coming, then a blank line:
-            client.println("HTTP/1.1 200 OK");
-            client.println("Content-type:text/html");
-            // The HTTP response ends with another blank line:
-            client.println();
-            // break out of the while loop:
             break;
           } else {    // End of line condition
             if (currentLine.startsWith("GET")) {
@@ -76,9 +115,6 @@ int handle_clients(BrickPick &brickpick) {
         }
       }
     }
-    // close the connection:
-    client.stop();
-    Serial.println("Client Disconnected.");
     return 0;
   }
   return 1;

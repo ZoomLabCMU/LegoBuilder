@@ -54,7 +54,7 @@ void setup()
 
   // millis
   update_timer.every(100, update_UI_callback, &brickpick);
-  update_timer.every(100, plotting_callback, &brickpick);
+  update_timer.every(10, plotting_callback, &brickpick);
   update_timer.every(1, update_brickpick_callback, &brickpick);
   // Init Motors
   if (!AFMS.begin()) {
@@ -64,16 +64,10 @@ void setup()
   Serial.println(F("Initialized"));
 }
 
-size_t tmp_brick = 0;
 void loop(){
   // View client requests for commands
   int return_code = handle_clients(brickpick);
-  /*
-  request = parse_client_requests();
-  if (request != NULL) {
-    return_code = brickpick->set_command(request);
-  }
-  */
+
   update_timer.tick();
 }
 
@@ -91,7 +85,6 @@ bool update_UI_callback(BrickPick *brickpick) {
 }
 
 bool plotting_callback(BrickPick *brickpick) {
-  return true;
   double x = brickpick->get_long_plate_pos_mm();
   double target = brickpick->get_long_plate_target_mm();
   long u_l = brickpick->get_long_plate_ctrl();
@@ -101,9 +94,6 @@ bool plotting_callback(BrickPick *brickpick) {
   Serial.print(",");
   Serial.print("target:");
   Serial.print(target);
-  Serial.print(",");
-  Serial.print("u_l:");
-  Serial.print(u_l);
   Serial.println();
   return true;
 }

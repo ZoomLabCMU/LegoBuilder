@@ -51,13 +51,14 @@ velocityBindings = {
 }
 
 positionBindings = {
-    '1': {'command': '/set_long_target_brick', 'target_brick': 1},  #Up
-    '2': {'command': '/set_long_target_brick', 'target_brick': 2},  #Down
-    '3': {'command': '/set_long_target_brick', 'target_brick': 3},  #Right
-    '4': {'command': '/set_long_target_brick', 'target_brick': 4},  #Left
-    '5': {'command': '/set_long_target_brick', 'target_brick': 5},  #Space
-    'o': {'command': '/set_plunger', 'plunger_target': 0}, #plunger up
-    'p': {'command': '/set_plunger', 'plunger_target': 1} #plunger down
+    '0': {'command': '/set_long_target_mm', 'target_mm': 0.0}, # Zero
+    '1': {'command': '/goto_long_brick', 'target_brick': 1},  # Brick 1
+    '2': {'command': '/goto_long_brick', 'target_brick': 2},  # Brick 2
+    '3': {'command': '/goto_long_brick', 'target_brick': 3},  # Brick 3
+    '4': {'command': '/goto_long_brick', 'target_brick': 4},  # Brick 4
+    '5': {'command': '/goto_long_brick', 'target_brick': 5},  # Brick 5
+    'o': {'command': '/goto_plunger', 'plunger_target': 0}, #plunger up
+    'p': {'command': '/goto_plunger', 'plunger_target': 1} #plunger down
 }
 
 
@@ -73,7 +74,7 @@ class BrickPickTeleopNode(Node):
         while not self.cmd_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('service not available, waiting again...')
 
-    def send_cmd_request(self, cmd_request : BrickpickCommand.Request) -> int | None:
+    def send_cmd_request(self, cmd_request : BrickpickCommand.Request) -> BrickpickCommand.Response:
         #Blocking and waiting???
 
         #self.future = self.cmd_client.call_async(self.cmd_request)
@@ -148,7 +149,7 @@ def main(args=None):
 
             response = brickpick_teleop_node.send_cmd_request(command_request)
             brickpick_teleop_node.get_logger().info(
-                f'Command status: {response}'
+                f'Command status: {response.status}'
             )
     except Exception as e:
         print(e)

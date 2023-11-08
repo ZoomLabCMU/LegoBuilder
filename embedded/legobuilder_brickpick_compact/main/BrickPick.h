@@ -21,11 +21,13 @@ class BrickPick {
 
     void set_command(const char* request, size_t n);
     bool is_valid_request(const char* request, size_t n);
-    bool request_complete();
+    int check_command_status(String active_command);
     void update();
 
     void long_plate_pos_incr();
     void long_plate_pos_decr();
+    void short_plate_pos_incr();
+    void short_plate_pos_decr();
 
     long get_short_plate_pos();
     long get_long_plate_pos();
@@ -51,11 +53,9 @@ class BrickPick {
     //const double _long_pos_max_mm = 0;
     //const double _short_pos_max_mm = 0;
 
-    // Comms
-    int _request_status = 0; // 0 for complete, 1 for pending, 2 for failure
 
     // State Estimation
-    long _short_plate_pos;
+    volatile long _short_plate_pos;
     volatile long _long_plate_pos;
     double _short_plate_pos_mm;
     double _long_plate_pos_mm;
@@ -64,6 +64,7 @@ class BrickPick {
     size_t _short_control_mode = 0; // 0 for velocity, 1 for position
 
     void set_long_control_mode(size_t control_mode);
+    void set_short_control_mode(size_t control_mode);
 
     long _short_plate_control;
     long _long_plate_control;
@@ -79,16 +80,16 @@ class BrickPick {
     void set_short_target_mm(double target_mm);
     void set_long_target_mm(double target_mm);
 
-    double _Kp_l = 100;
-    double _Ki_l = 0;
-    double _Kd_l = 0;
+    double _Kp_l = 500;
+    double _Ki_l = 0.0;
+    double _Kd_l = 600;
     long _e_long = 0;
     long _e_long_prev = 0;
     long _de_long = 0;
     long _e_sum_long = 0;
     long _e_sum_long_max = 0xFFFFFFFF;
     
-    double _Kp_s = 100;
+    double _Kp_s = 0;
     double _Ki_s = 0;
     double _Kd_s = 0;
     long _e_short = 0;
