@@ -41,11 +41,11 @@ void setup()
   init_UI();
 
   // We start by connecting to a WiFi network
-  const char* ssid     = "128NCraig617";
-  const char* password = "617617617";
+  const char* ssid     = "CMU-DEVICE"; //"128NCraig617";
+  const char* password = NULL; //"617617617";
 
   // Display login info on TFT to verify
-  show_WiFi_info(String(ssid), String(password));
+  show_WiFi_info(String(ssid), "NULL");
   delay(5000);
 
   // Create WiFi server
