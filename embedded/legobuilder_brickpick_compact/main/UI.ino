@@ -11,6 +11,24 @@ User Interface (on built-in TFT screen) for BrickPick
 // Use dedicated hardware SPI pins
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 
+void show_WiFi_info(String ssid, String password) {
+  // display the SSID and password on the TFT display
+  tft.setRotation(3);
+  tft.fillScreen(ST77XX_BLACK);
+  tft.setCursor(0,0);
+  tft.setTextColor(ST77XX_WHITE);
+  tft.setTextSize(2);
+  tft.println("Connecting...");
+  tft.println();
+  tft.println("   " + ssid);
+  tft.println();
+  tft.print("   " + String(password[0]));
+  for (int i = 1; i < password.length() - 1; i++) {
+    tft.print("*");
+  }
+  tft.println(password[password.length() - 1]);
+}
+
 void init_UI() {
   // turn on backlite
   pinMode(TFT_BACKLITE, OUTPUT);
@@ -22,6 +40,9 @@ void init_UI() {
 
   // initialize TFT
   tft.init(135, 240); // Init ST7789 240x135
+}
+
+void show_main_display() {
   tft.setRotation(2);
   tft.fillScreen(ST77XX_BLACK);
   draw_payload();

@@ -36,7 +36,9 @@ This node takes keypresses from the keyboard and publishes them as BrickpickComm
 Velocity Control:
 short_vel    ('Up', 'Down')
 long_vel     ('Right', 'Left')
-plunger_down ('Space')
+
+Position Control:
+plunger ('p', 'o')
 
 CTRL-C to quit
 """
@@ -57,6 +59,12 @@ positionBindings = {
     '3': {'command': '/goto_long_brick', 'target_brick': 3},  # Brick 3
     '4': {'command': '/goto_long_brick', 'target_brick': 4},  # Brick 4
     '5': {'command': '/goto_long_brick', 'target_brick': 5},  # Brick 5
+    ')': {'command': '/set_short_target_mm', 'target_mm': 0.0}, # Zero
+    '!': {'command': '/goto_short_brick', 'target_brick': 1},  # Brick 1
+    '@': {'command': '/goto_short_brick', 'target_brick': 2},  # Brick 2
+    '#': {'command': '/goto_short_brick', 'target_brick': 3},  # Brick 3
+    '$': {'command': '/goto_short_brick', 'target_brick': 4},  # Brick 4
+    '%': {'command': '/goto_short_brick', 'target_brick': 5},  # Brick 5
     'o': {'command': '/goto_plunger', 'plunger_target': 0}, #plunger up
     'p': {'command': '/goto_plunger', 'plunger_target': 1} #plunger down
 }
@@ -91,8 +99,10 @@ def getKey(settings):
         tty.setraw(sys.stdin.fileno())
         # sys.stdin.read() returns a string on Linux
         key = sys.stdin.read(1)
+        print(f"key0: {key}")
         if key == '\x1b': #Escape keys (fn, arrow, ctrl, etc)
             key = sys.stdin.read(2)
+            print(f"key1: {key}")
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
     return key
 

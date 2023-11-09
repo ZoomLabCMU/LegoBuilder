@@ -13,6 +13,8 @@ from rclpy.node import Node
 from legobuilder_interfaces.srv import BrickpickCommand
 from legobuilder_brickpick.brickpick_adapter import BrickPickAdapter
 
+ip_address = "192.168.2.110"
+
 class BrickPickAdapterNode(Node):
     def __init__(self):
         super().__init__("brickpick_adapter_node") #type: ignore
@@ -23,7 +25,7 @@ class BrickPickAdapterNode(Node):
             'brickpick_cmd',
             self.recv_cmd_callback
         )
-        self.brickpick_adapter = BrickPickAdapter()
+        self.brickpick_adapter = BrickPickAdapter(ip_address)
 
     def recv_cmd_callback(self, request : BrickpickCommand.Request, response : BrickpickCommand.Response):
         # push command to brickpick_adapter

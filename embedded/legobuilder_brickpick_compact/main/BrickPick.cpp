@@ -366,12 +366,15 @@ void BrickPick::set_plunger_target(size_t i) {
 }
 
 void BrickPick::update_plunger_ctrls() {
-  int MAX_POS = 3000;
-  int MIN_POS = 2200;
+  int MAX_POS = 3300;
+  int MIN_POS = 2500;
   int plunger_pos = analogRead(PLUNGER_POT);
   int plunger_target = (MAX_POS - MIN_POS) * _plunger_target + MIN_POS;
   int error = plunger_target - plunger_pos;
   int plunger_ctrl = _Kp_plunger * error;
+  if (abs(error) > 50) {
+    plunger_ctrl = 255 * (error > 0 ? 1 : -1);
+  }
 
   // Check if plunger is stalled by checking if the last 5 controls and positions are all equal
   bool stall_check = true;
@@ -380,7 +383,7 @@ void BrickPick::update_plunger_ctrls() {
     _plunger_positions[i] = _plunger_positions[i+1];
 
     if ((abs(_plunger_ctrls[i]) > 30) ||
-        (abs(_plunger_positions[i] - plunger_pos) > 10)) {
+        (abs(_plunger_positions[i] - plunger_pos) > 15)) {
           stall_check = false;
         }
   }

@@ -89,9 +89,9 @@ class BrickPick {
     long _e_sum_long = 0;
     long _e_sum_long_max = 0xFFFFFFFF;
     
-    double _Kp_s = 0;
-    double _Ki_s = 0;
-    double _Kd_s = 0;
+    double _Kp_s = 500;
+    double _Ki_s = 0.0;
+    double _Kd_s = 600;
     long _e_short = 0;
     long _e_short_prev = 0;
     long _de_short = 0;
@@ -107,7 +107,7 @@ class BrickPick {
     long _plunger_ctrls[_plunger_buf_n] = {0};
     int _plunger_positions[_plunger_buf_n] = {0};
     bool _plunger_stalled;
-    double _Kp_plunger = 10.0;
+    double _Kp_plunger = 5.0;
 
     void set_plunger_target(size_t i);
     void update_plunger_ctrls();
