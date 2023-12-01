@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'legobuilder'
+package_name = 'legobuilder_control'
 
 setup(
     name=package_name,
@@ -18,4 +18,9 @@ setup(
     description='TODO: Package description',
     license='TODO: License declaration',
     tests_require=['pytest'],
+    entry_points={
+        'console_scripts': [
+            'bp_teleop = legobuilder_control.brickpick_teleop_node:main',
+        ],
+    },
 )

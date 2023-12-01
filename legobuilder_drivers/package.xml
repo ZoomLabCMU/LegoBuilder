@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>legobuilder_brickpick</name>
+  <name>legobuilder_drivers</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
   <maintainer email="ctchang001@gmail.com">chris</maintainer>
@@ -9,9 +9,8 @@
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
-  <exec_depend>ros2launch</exec_depend>
-  <exec_depend>example_interfaces</exec_depend>
-  
+  <exec_depend>legobuilder_interfaces</exec_depend>
+
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>

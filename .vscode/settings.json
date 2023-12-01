@@ -15,5 +15,6 @@
         "/home/chris/ros2_ws/install/legobuilder_brickpick/lib/python3.10/site-packages",
         "/opt/ros/humble/lib/python3.10/site-packages",
         "/opt/ros/humble/local/lib/python3.10/dist-packages"
-    ]
+    ],
+    "cmake.sourceDirectory": "/home/chris/ros2_ws/src/LegoBuilder/legobuilder_interfaces"
 }

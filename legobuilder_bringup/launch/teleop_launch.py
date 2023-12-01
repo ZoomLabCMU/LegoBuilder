@@ -6,19 +6,13 @@ def generate_launch_description():
 
     #config = ...
 
-    brickpick_adapter_node = Node(
-        package='legobuilder_brickpick',
-        executable='brickpick_adapter',
-        name='brickpick_adapter'
-    )
-
+    # Nodes for teleop control
     brickpick_teleop_node = Node(
-        package='legobuilder_brickpick',
-        executable='teleop',
+        package='legobuilder_control',
+        executable='bp_teleop',
         name='brickpick_teleop'
     )
 
-    ld.add_action(brickpick_adapter_node)
     ld.add_action(brickpick_teleop_node)
 
     return ld

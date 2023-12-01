@@ -1,6 +1,4 @@
 import numpy as np
-import serial
-from collections import deque
 
 from std_msgs.msg import String
 import requests
