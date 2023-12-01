@@ -5,14 +5,22 @@
     },
     "python.analysis.typeCheckingMode": "basic",
     "python.autoComplete.extraPaths": [
-        "/home/chris/ros2_ws/install/legobuilder_interfaces/lib/python3.10/site-packages",
-        "/home/chris/ros2_ws/install/legobuilder_brickpick/lib/python3.10/site-packages",
+        "/home/chris/ros2_ws/src/LegoBuilder/venv/lib/python3.10/site-packages",
+        "/home/chris/ros2_ws/install/legobuilder_interfaces/lib/python3.10/site-packates",
+        "/home/chris/ros2_ws/install/legobuilder_drivers/lib/python3.10/site-packates",
+        "/home/chris/ros2_ws/install/legobuilder_control/lib/python3.10/site-packates",
+        "/home/chris/ros2_ws/install/legobuilder_bringup/lib/python3.10/site-packates",
+        "/home/chris/ros2_ws/install/legobuilder/lib/python3.10/site-packates",
         "/opt/ros/humble/lib/python3.10/site-packages",
         "/opt/ros/humble/local/lib/python3.10/dist-packages"
     ],
     "python.analysis.extraPaths": [
-        "/home/chris/ros2_ws/install/legobuilder_interfaces/lib/python3.10/site-packages",
-        "/home/chris/ros2_ws/install/legobuilder_brickpick/lib/python3.10/site-packages",
+        "/home/chris/ros2_ws/src/LegoBuilder/venv/lib/python3.10/site-packages",
+        "/home/chris/ros2_ws/install/legobuilder_interfaces/lib/python3.10/site-packates",
+        "/home/chris/ros2_ws/install/legobuilder_drivers/lib/python3.10/site-packates",
+        "/home/chris/ros2_ws/install/legobuilder_control/lib/python3.10/site-packates",
+        "/home/chris/ros2_ws/install/legobuilder_bringup/lib/python3.10/site-packates",
+        "/home/chris/ros2_ws/install/legobuilder/lib/python3.10/site-packates",
         "/opt/ros/humble/lib/python3.10/site-packages",
         "/opt/ros/humble/local/lib/python3.10/dist-packages"
     ],

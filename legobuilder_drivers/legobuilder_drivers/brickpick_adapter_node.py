@@ -11,7 +11,7 @@ import rclpy
 from rclpy.node import Node
 
 from legobuilder_interfaces.srv import BrickpickCommand
-from legobuilder_brickpick.brickpick_adapter import BrickPickAdapter
+from legobuilder_drivers.brickpick_adapter import BrickPickAdapter
 
 ip_address = "172.26.185.38"
 

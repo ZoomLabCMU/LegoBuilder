@@ -20,6 +20,12 @@ def generate_launch_description():
     '''
 
     ### Sensors ###
+    # Workspace Camera
+    workspace_camera_node = Node(
+        package='legobuilder_drivers',
+        executable='workspace_camera',
+        name='workspace_camera'
+    )
     # RealSense D405
     # TODO - Write me
     '''
@@ -39,5 +45,6 @@ def generate_launch_description():
     # TODO - Write me
 
     ld.add_action(brickpick_adapter_node)
+    ld.add_action(workspace_camera_node)
 
     return ld

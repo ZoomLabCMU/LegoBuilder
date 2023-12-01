@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'brickpick_adapter = legobuilder_drivers.brickpick_adapter_node:main',
+            'workspace_camera = legobuilder_drivers.workspace_camera_node:main'
         ],
     },
 )
