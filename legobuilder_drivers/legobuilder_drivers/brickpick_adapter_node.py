@@ -14,6 +14,7 @@ from legobuilder_interfaces.srv import BrickpickCommand
 from legobuilder_drivers.brickpick_adapter import BrickPickAdapter
 
 ip_address = "172.26.185.38"
+ip_address = "192.168.2.101"
 
 class BrickPickAdapterNode(Node):
     def __init__(self):
@@ -23,21 +24,24 @@ class BrickPickAdapterNode(Node):
         self.cmd_subscriber = self.create_service(
             BrickpickCommand,
             'brickpick_cmd',
-            self.recv_cmd_callback
+            self.recv_cmd_req_callback
         )
         self.brickpick_adapter = BrickPickAdapter(ip_address)
 
-    def recv_cmd_callback(self, request : BrickpickCommand.Request, response : BrickpickCommand.Response):
+    def recv_cmd_req_callback(self, request : BrickpickCommand.Request, response : BrickpickCommand.Response):
         # push command to brickpick_adapter
- 
+        self.get_logger().info(
+            f'Incoming BrickpickCommand request: {request}'
+        )
         # wait for command to finish/terminate
+        self.get_logger().info(f"Pushing HTTP request to BrickPick@{ip_address}")
         status = self.brickpick_adapter.push_cmd(request)
+        self.get_logger().info(f"Recieved HTTP response from BrickPick@{ip_address}:\n{status}")
         # set response
         response.status = status
         self.get_logger().info(
-            f'Incoming request\ncommand: {request.command} u: {request.u} target_brick: {request.target_brick} plunger_target: {request.plunger_target}'
+            f'Returning BrickpickCommand response: {response}'
         )
-
         return response
 
 

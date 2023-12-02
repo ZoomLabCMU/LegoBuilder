@@ -6,6 +6,7 @@
         "limitSymbolsToIncludedHeaders": false
       },
       "includePath": [
+        "${workspaceFolder}/**",
         "/home/chris/ros2_ws/install/legobuilder_interfaces/include/**",
         "/opt/ros/humble/include/**",
         "/usr/include/**"

@@ -1,6 +1,5 @@
 import numpy as np
 
-from std_msgs.msg import String
 import requests
 
 from legobuilder_interfaces.srv import BrickpickCommand
@@ -14,7 +13,7 @@ class BrickPickAdapter(object):
 
 
     ### ROS node callback functions ###
-    def push_cmd(self, request : BrickpickCommand.Request) -> String:
+    def push_cmd(self, request : BrickpickCommand.Request) -> str:
         if request.command == "/set_long_ctrl":
             params = {'u': request.u}
             response = requests.get(f"http://{self.ip_address}/set_long_ctrl", params=params)
@@ -45,6 +44,6 @@ class BrickPickAdapter(object):
             params = {'plunger_target': request.target_brick}
             response = requests.get(f"http://{self.ip_address}/goto_short_brick", params=params)
         else:
-            return "No response received..." #type: ignore
-        return str(response.content)  #type: ignore
+            return "No response received..."
+        return str(response.content)
 

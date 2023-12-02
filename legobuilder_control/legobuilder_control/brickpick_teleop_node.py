@@ -19,6 +19,7 @@ import rclpy
 from rclpy.node import Node
 
 from legobuilder_interfaces.srv import BrickpickCommand
+from legobuilder_control.Controllers import BrickPickController
 
 import threading
 import sys
@@ -34,40 +35,21 @@ help_msg = """
 This node takes keypresses from the keyboard and publishes them as BrickpickCommand service requests
 -------------------------
 Velocity Control:
-short_vel    ('Up', 'Down')
-long_vel     ('Right', 'Left')
+Stop: 'Space'
+Long plate:  /\ Up 
+             ||
+             \/ Down
+
+            Up  Down
+Short plate: <===>
 
 Position Control:
-plunger ('p', 'o')
+plunger     ('p', 'o')              [Plunger down/up]
+long plate  ('0', #        , '5')   [Go to brick #]
+short plate (')', shift + #, '%')   [Go to brick #]
 
 CTRL-C to quit
 """
-
-# velocity state space
-# [short_vel, long_vel, plunger_down]
-velocityBindings = {
-    '[A': {'command': '/set_long_ctrl', 'u': -1},   #Up
-    '[B': {'command': '/set_long_ctrl', 'u': 1},    #Down
-    '[C': {'command': '/set_short_ctrl', 'u': -1},  #Right
-    '[D': {'command': '/set_short_ctrl', 'u': 1},   #Left
-}
-
-positionBindings = {
-    '0': {'command': '/set_long_target_mm', 'target_mm': 0.0}, # Zero
-    '1': {'command': '/goto_long_brick', 'target_brick': 1},  # Brick 1
-    '2': {'command': '/goto_long_brick', 'target_brick': 2},  # Brick 2
-    '3': {'command': '/goto_long_brick', 'target_brick': 3},  # Brick 3
-    '4': {'command': '/goto_long_brick', 'target_brick': 4},  # Brick 4
-    '5': {'command': '/goto_long_brick', 'target_brick': 5},  # Brick 5
-    ')': {'command': '/set_short_target_mm', 'target_mm': 0.0}, # Zero
-    '!': {'command': '/goto_short_brick', 'target_brick': 1},  # Brick 1
-    '@': {'command': '/goto_short_brick', 'target_brick': 2},  # Brick 2
-    '#': {'command': '/goto_short_brick', 'target_brick': 3},  # Brick 3
-    '$': {'command': '/goto_short_brick', 'target_brick': 4},  # Brick 4
-    '%': {'command': '/goto_short_brick', 'target_brick': 5},  # Brick 5
-    'o': {'command': '/goto_plunger', 'plunger_target': 0}, #plunger up
-    'p': {'command': '/goto_plunger', 'plunger_target': 1} #plunger down
-}
 
 
 class BrickPickTeleopNode(Node):
@@ -75,21 +57,13 @@ class BrickPickTeleopNode(Node):
     def __init__(self):
         super().__init__('brickpick_teleop_node') # type: ignore
 
-        self.cmd_client = self.create_client(
+        self.brickpick_cli = self.create_client(
             BrickpickCommand, 
             "brickpick_cmd"
         )
-        while not self.cmd_client.wait_for_service(timeout_sec=1.0):
+        while not self.brickpick_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('service not available, waiting again...')
 
-    def send_cmd_request(self, cmd_request : BrickpickCommand.Request) -> BrickpickCommand.Response:
-        #Blocking and waiting???
-
-        #self.future = self.cmd_client.call_async(self.cmd_request)
-        #rclpy.spin_until_future_complete(self, self.future)
-        #return self.future.result()
-
-        return self.cmd_client.call(cmd_request)
 
 def getKey(settings):
     if sys.platform == 'win32':
@@ -99,10 +73,8 @@ def getKey(settings):
         tty.setraw(sys.stdin.fileno())
         # sys.stdin.read() returns a string on Linux
         key = sys.stdin.read(1)
-        print(f"key0: {key}")
         if key == '\x1b': #Escape keys (fn, arrow, ctrl, etc)
             key = sys.stdin.read(2)
-            print(f"key1: {key}")
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
     return key
 
@@ -122,8 +94,36 @@ def main(args=None):
     rclpy.init(args=args)
 
     brickpick_teleop_node = BrickPickTeleopNode()
+    bp_controller = BrickPickController(brickpick_teleop_node.brickpick_cli)
+
+    bindings = {
+        # Velocity Controls 
+        '[A': lambda: bp_controller.set_long_ctrl(-1),          # Up     
+        '[B': lambda: bp_controller.set_long_ctrl(1),           # Down
+        '[C': lambda: bp_controller.set_short_ctrl(-1),         # Right
+        '[D': lambda: bp_controller.set_short_ctrl(1),          # Left
+
+        # Long plate PID
+        '0': lambda: bp_controller.set_long_target_mm(0.0),     # 0
+        '1': lambda: bp_controller.long_goto_brick(1),          # Brick 1
+        '2': lambda: bp_controller.long_goto_brick(2),          # Brick 2
+        '3': lambda: bp_controller.long_goto_brick(3),          # Brick 3
+        '4': lambda: bp_controller.long_goto_brick(4),          # Brick 4
+        '5': lambda: bp_controller.long_goto_brick(5),          # Brick 5
+
+        # Short plate PID
+        ')': lambda: bp_controller.set_short_target_mm(0.0),     # 0
+        '!': lambda: bp_controller.short_goto_brick(1),          # Brick 1
+        '@': lambda: bp_controller.short_goto_brick(2),          # Brick 2
+        '#': lambda: bp_controller.short_goto_brick(3),          # Brick 3
+        '$': lambda: bp_controller.short_goto_brick(4),          # Brick 4
+        '%': lambda: bp_controller.short_goto_brick(5),          # Brick 5
+
+        # Plunger PID
+        'o': lambda: bp_controller.plunger_up(),                 # Plunger up
+        'p': lambda: bp_controller.plunger_down(),               # Plunger down
+    }
     
-    #executor = rclpy.executors.MultiThreadedExecutor()
     spinner = threading.Thread(target=rclpy.spin, args=(brickpick_teleop_node,))
     spinner.start()
 
@@ -132,44 +132,22 @@ def main(args=None):
         velocity_scalar = 65535 / 4
         while True:
             key = getKey(settings)
-            if key in velocityBindings.keys():
-                command = velocityBindings[key]['command']
-                u = velocityBindings[key]['u'] * velocity_scalar
-
-                command_request = BrickpickCommand.Request()
-                command_request.command = command
-                command_request.u = int(u)
-            elif key in positionBindings.keys():
-                command = positionBindings[key]['command']
-                command_request = BrickpickCommand.Request()
-                command_request.command = command
-                if 'target_brick' in positionBindings[key]:
-                    target_brick = positionBindings[key]['target_brick']
-                    command_request.target_brick = target_brick
-                if 'plunger_target' in positionBindings[key]:
-                    plunger_target = positionBindings[key]['plunger_target']
-                    command_request.plunger_target = plunger_target
-
+            if key in bindings.keys():
+                status = bindings[key]()
             else:
-                command_request = BrickpickCommand.Request()
-                command_request.command = '/stop'
+                status = bp_controller.stop()
                 if (key == '\x03'):
                     break
-            print(f"Requested controls [{key}]: (request: {command_request}")
-
-            response = brickpick_teleop_node.send_cmd_request(command_request)
             brickpick_teleop_node.get_logger().info(
-                f'Command status: {response.status}'
+                f'Command status: {status}'
             )
     except Exception as e:
         print(e)
 
     finally:
-        command_request = BrickpickCommand.Request()
-        command_request.command = '/stop'
-        response = brickpick_teleop_node.send_cmd_request(command_request)
+        status = bp_controller.stop()
         brickpick_teleop_node.get_logger().info(
-            f'Command status: {response}'
+            f'Command status: {status}'
         )
         brickpick_teleop_node.destroy_node()
         rclpy.shutdown()
