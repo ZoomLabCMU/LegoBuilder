@@ -1,8 +1,18 @@
 from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
+from ament_index_python.packages import get_package_share_directory
 from launch_ros.actions import Node
 
 def generate_launch_description():
     ld = LaunchDescription()
+
+    sim_arg = DeclareLaunchArgument(
+        'sim', 
+        default_value='false', 
+        description="Set to 'true' to enable simulation"
+    )
 
     #config = ...
 
@@ -18,6 +28,13 @@ def generate_launch_description():
     '''
     ros2 launch ur_robot_driver ur_control.launch.py ur_type:=ur5e robot_ip:=192.168.??.???
     '''
+    ur5e_ld = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([get_package_share_directory('ur_robot_driver'), '/launch/', 'ur_control.launch.py']),
+        launch_arguments={'ur_type': 'ur5e',
+                          'robot_ip': 'yyy.yyy.yy.yy',
+                          'use_mock_hardware': LaunchConfiguration('sim'),
+                          'launch_rviz': LaunchConfiguration('sim')}.items()
+    )
 
     ### Sensors ###
     # Workspace Camera
@@ -43,8 +60,9 @@ def generate_launch_description():
     '''
     # Proprioceptive Sensor
     # TODO - Write me
-
+    ld.add_action(sim_arg)
     ld.add_action(brickpick_adapter_node)
     ld.add_action(workspace_camera_node)
+    ld.add_action(ur5e_ld)
 
     return ld
