@@ -6,6 +6,11 @@ def generate_launch_description():
 
     #config = ...
 
-    # Nodes for demo 1
+    demo1_control_node = Node(
+        package='legobuilder_control',
+        executable='demo1',
+        name='demo1_controller'
+    )
 
+    ld.add_action(demo1_control_node)
     return ld

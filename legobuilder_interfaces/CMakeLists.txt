@@ -7,13 +7,25 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(sensor_msgs REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
+set(msg_files
+  "msg/BoundingBox.msg"
+)
+
+set(srv_files
+  "srv/BrickpickCommand.srv"
+  "srv/LegoDetection.srv"
+)
+
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "srv/BrickpickCommand.srv"  
+  ${msg_files}
+  ${srv_files}
+  DEPENDENCIES sensor_msgs
 )
 
 

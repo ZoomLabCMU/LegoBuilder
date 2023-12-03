@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'legobuilder_control'
+package_name = 'legobuilder_perception'
 
 setup(
     name=package_name,
@@ -20,8 +20,6 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'bp_teleop = legobuilder_control.brickpick_teleop_node:main',
-            'demo1 = legobuilder_control.legobuilder_control_node:demo1'
         ],
     },
 )

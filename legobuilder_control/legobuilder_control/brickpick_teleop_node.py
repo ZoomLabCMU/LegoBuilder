@@ -124,16 +124,14 @@ def main(args=None):
         'p': lambda: bp_controller.plunger_down(),               # Plunger down
     }
     
-    spinner = threading.Thread(target=rclpy.spin, args=(brickpick_teleop_node,))
-    spinner.start()
-
     try:
         print(help_msg)
-        velocity_scalar = 65535 / 4
         while True:
             key = getKey(settings)
             if key in bindings.keys():
                 status = bindings[key]()
+            elif key == 'h':
+                print(help_msg)
             else:
                 status = bp_controller.stop()
                 if (key == '\x03'):
@@ -151,7 +149,6 @@ def main(args=None):
         )
         brickpick_teleop_node.destroy_node()
         rclpy.shutdown()
-        spinner.join()
 
         restoreTerminalSettings(settings)
 

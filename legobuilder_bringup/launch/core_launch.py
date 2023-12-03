@@ -1,4 +1,5 @@
 from launch import LaunchDescription
+from launch.conditions import IfCondition, LaunchConfigurationEquals
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -12,6 +13,16 @@ def generate_launch_description():
         'sim', 
         default_value='false', 
         description="Set to 'true' to enable simulation"
+    )
+    workspace_camera_arg = DeclareLaunchArgument(
+        'enable_ws_cam',
+        default_value='true',
+        description="Set to 'true' to activate workspace camera"
+    )
+    ee_camera_arg = DeclareLaunchArgument(
+        'enable_ee_cam',
+        default_value='true',
+        description="Set to 'true' to enable end effector camera"
     )
 
     #config = ...
@@ -31,8 +42,7 @@ def generate_launch_description():
     ur5e_ld = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([get_package_share_directory('ur_robot_driver'), '/launch/', 'ur_control.launch.py']),
         launch_arguments={'ur_type': 'ur5e',
-                          'robot_ip': 'yyy.yyy.yy.yy',
-                          'use_mock_hardware': LaunchConfiguration('sim'),
+                          'robot_ip': '192.168.56.101',
                           'launch_rviz': LaunchConfiguration('sim')}.items()
     )
 
@@ -41,28 +51,26 @@ def generate_launch_description():
     workspace_camera_node = Node(
         package='legobuilder_drivers',
         executable='workspace_camera',
-        name='workspace_camera'
+        name='workspace_camera',
+        condition=IfCondition(LaunchConfiguration('enable_ws_cam'))
     )
+
     # RealSense D405
-    # TODO - Write me
-    '''
-    From realsense2_camera/launch/rs_launch.py
-    brickpcick_camera_node = Node(
-        package='realsense2_camera',
-        namespace=LaunchConfiguration('camera_namespace' + param_name_suffix),
-        name=LaunchConfiguration('camera_name' + param_name_suffix),
-        executable='realsense2_camera_node',
-        parameters=[params, params_from_file],
-        output=LaunchConfiguration('output' + param_name_suffix),
-        arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level' + param_name_suffix)],
-        emulate_tty=True,
+    realsense_ld = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([get_package_share_directory('realsense2_camera'), '/launch/', 'rs_launch.py']),
+        launch_arguments={},
+        condition=IfCondition(LaunchConfiguration('enable_ee_cam'))
     )
-    '''
     # Proprioceptive Sensor
     # TODO - Write me
     ld.add_action(sim_arg)
+    ld.add_action(workspace_camera_arg)
+    ld.add_action(ee_camera_arg)
+    
     ld.add_action(brickpick_adapter_node)
     ld.add_action(workspace_camera_node)
+
+    ld.add_action(realsense_ld)
     ld.add_action(ur5e_ld)
 
     return ld

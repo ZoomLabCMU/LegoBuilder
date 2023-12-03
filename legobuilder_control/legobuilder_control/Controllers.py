@@ -2,6 +2,7 @@
 
 import math
 import rclpy
+import rclpy.time
 from rclpy.node import Client
 
 from legobuilder_interfaces.srv import BrickpickCommand
@@ -114,10 +115,24 @@ class URController:
     def __init__(self, ur_driver_pub):
         self.current_arm_position = [0.0, 0.0, 0.0]
 
-        self.tf_buffer = tf2_ros.Buffer()
-        #self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
         self.ur_driver_pub = ur_driver_pub
+
+        self.ee_wrench = WrenchStamped()
+        self.joint_states = JointState()
+        self.tf_buffer = tf2_ros.Buffer()
         T.sleep(1)
+
+    def update_ee_wrench(self, wrench : WrenchStamped):
+        self.ee_wrench = wrench
+        return True
+
+    def update_joint_states(self, joint_states : JointState):
+        self.joint_states = joint_states
+        return True
+
+    def update_tf_buffer(self, tf_buffer : tf2_ros.Buffer):
+        self.tf_buffer = tf_buffer
+        return True
 
     def set_tcp(self, tcp_pose):
         set_tcp_string = String()
@@ -214,7 +229,7 @@ class URController:
             start_time = T.time()
             current_time = T.time()
             while current_time-start_time < time:
-                wrench_msg = rospy.wait_for_message('/wrench', WrenchStamped)
+                wrench_msg = self.ee_wrench
                 if force_thresholds is not None:
                     if abs(wrench_msg.wrench.force.x) > force_thresholds[0] or \
                        abs(wrench_msg.wrench.force.y) > force_thresholds[1] or \
@@ -264,7 +279,7 @@ class URController:
             start_time = T.time()
             current_time = T.time()
             while current_time-start_time < time:
-                wrench_msg = rospy.wait_for_message('/wrench', WrenchStamped)
+                wrench_msg = self.ee_wrench
                 if force_thresholds is not None:
                     if abs(wrench_msg.wrench.force.x) > force_thresholds[0] or \
                        abs(wrench_msg.wrench.force.y) > force_thresholds[1] or \
@@ -323,7 +338,7 @@ class URController:
             start_time = T.time()
             current_time = T.time()
             while current_time-start_time < time:
-                wrench_msg = rospy.wait_for_message('/wrench', WrenchStamped)
+                wrench_msg = self.ee_wrench
                 if force_thresholds is not None:
                     if abs(wrench_msg.wrench.force.x) > force_thresholds[0] or \
                        abs(wrench_msg.wrench.force.y) > force_thresholds[1] or \
@@ -389,8 +404,8 @@ class URController:
       return self.rotate_ee(axis, angle / 180 * np.pi, time, force_thresholds, torque_thresholds)
 
     def get_ee_pose(self):
-        rospy.sleep(1)
-        trans = self.tf_buffer.lookup_transform('base', 'tool0_controller', rospy.Time(0))
+        T.sleep(1)
+        trans = self.tf_buffer.lookup_transform('base', 'tool0_controller', rclpy.time.Time())
 
         orientation_q = trans.transform.rotation
         orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
@@ -403,7 +418,7 @@ class URController:
 
     def get_joints(self):
         try:
-            joint_state_msg = rospy.wait_for_message('/joint_states', JointState, 1)
+            joint_state_msg = self.joint_states
             return [joint_state_msg.position[0] * 180 / math.pi, joint_state_msg.position[1] * 180 / math.pi, joint_state_msg.position[2] * 180 / math.pi,
                     joint_state_msg.position[3] * 180 / math.pi, joint_state_msg.position[4] * 180 / math.pi, joint_state_msg.position[5] * 180 / math.pi]
         except:
