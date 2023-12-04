@@ -2,3 +2,4 @@ sensor_msgs/Image img
 ---
 sensor_msgs/Image ann_img
 legobuilder_interfaces/BoundingBox[] bounding_boxes
+float64[] scores

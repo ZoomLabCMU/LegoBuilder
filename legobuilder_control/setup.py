@@ -21,7 +21,8 @@ setup(
     entry_points={
         'console_scripts': [
             'bp_teleop = legobuilder_control.brickpick_teleop_node:main',
-            'demo1 = legobuilder_control.legobuilder_control_node:demo1'
+            'legobuilder_controller = legobuilder_control.legobuilder_control_node:main',
+            'demo1 = legobuilder_control.legobuilder_planner_node:demo1'
         ],
     },
 )

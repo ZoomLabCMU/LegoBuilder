@@ -8,6 +8,7 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
@@ -15,6 +16,8 @@ find_package(rosidl_default_generators REQUIRED)
 
 set(msg_files
   "msg/BoundingBox.msg"
+  "msg/GotoGoal.msg"
+  "msg/TwistGoal.msg"
 )
 
 set(srv_files
@@ -22,10 +25,17 @@ set(srv_files
   "srv/LegoDetection.srv"
 )
 
+set(action_files
+  "action/BasicControl.action"
+  "action/GotoControl.action"
+  "action/TCPTwistControl.action"
+)
+
 rosidl_generate_interfaces(${PROJECT_NAME}
   ${msg_files}
   ${srv_files}
-  DEPENDENCIES sensor_msgs
+  ${action_files}
+  DEPENDENCIES sensor_msgs geometry_msgs
 )
 
 

@@ -9,8 +9,6 @@ class BrickPickAdapter(object):
     def __init__(self, ip_address : str):
         # TODO - Kinematics (load from config)
         self.ip_address = ip_address
-        self.TCP = np.array([8.0, -16.0, 238.6]) #Coordinate transform in mm to corner of fixed brick
-
 
     ### ROS node callback functions ###
     def push_cmd(self, request : BrickpickCommand.Request) -> str:

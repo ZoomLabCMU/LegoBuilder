@@ -63,12 +63,21 @@ def generate_launch_description():
     )
     # Proprioceptive Sensor
     # TODO - Write me
+
+    ### Controller ###
+    lb_control_node = Node(
+        package='legobuilder_control',
+        executable='legobuilder_controller',
+        name='legobuilder_controller'
+    )
+
     ld.add_action(sim_arg)
     ld.add_action(workspace_camera_arg)
     ld.add_action(ee_camera_arg)
     
     ld.add_action(brickpick_adapter_node)
     ld.add_action(workspace_camera_node)
+    ld.add_action(lb_control_node)
 
     ld.add_action(realsense_ld)
     ld.add_action(ur5e_ld)
