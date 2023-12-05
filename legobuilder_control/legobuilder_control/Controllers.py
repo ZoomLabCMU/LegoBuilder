@@ -131,13 +131,6 @@ class URController:
 
         return True
 
-    def home_arm(self, time=None):
-        home_joint_angles = [90, -90, 90, -90, -90, -135]
-
-        self.move_joints_in_degrees(home_joint_angles, time)
-        T.sleep(10)
-        return True
-
     def freedrive(self, axes=[1,1,1,1,1,1], time=10):
         freedrive_mode_string = String()
         

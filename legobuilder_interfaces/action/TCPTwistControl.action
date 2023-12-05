@@ -1,6 +1,0 @@
-legobuilder_interfaces/TwistGoal goal
----
-string result
----
-# Feedback
-float64 completion_percent

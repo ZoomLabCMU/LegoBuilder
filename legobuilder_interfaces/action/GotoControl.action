@@ -1,8 +1,0 @@
-# Goal
-legobuilder_interfaces/GotoGoal goal
----
-# Result
-string result
----
-# Feedback
-float64 completion_percent

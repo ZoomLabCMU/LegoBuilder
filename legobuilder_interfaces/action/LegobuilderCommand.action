@@ -1,0 +1,22 @@
+# Goal
+# Basic
+string cmd
+float64 time
+geometry_msgs/Wrench wrench_thresh
+
+# Goto
+float64[] ee_pose
+float64[] joint_positions
+
+# TCP Twist
+float64[] displacement
+float64[] axis
+float64 angle
+
+# Flags
+bool use_time
+bool use_ft
+---
+string result
+---
+float64 completion_percent

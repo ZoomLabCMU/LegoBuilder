@@ -1,23 +1,26 @@
 import rclpy
+import rclpy.time
+import time as T
 from rclpy.action import ActionClient
+from rclpy.task import Future
 from rclpy.node import Node
 
 import tf2_ros
 
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import Wrench, Twist
-from legobuilder_interfaces.msg import GotoGoal, TwistGoal
-from legobuilder_interfaces.action import BasicControl, GotoControl, TCPTwistControl
+from legobuilder_interfaces.action import LegobuilderCommand
 
 from legobuilder_control import utils
 
 class LegoBuilderPlannerNode(Node):
 
     def __init__(self):
-        super().__init__('fibonacci_action_client')
-        self.basic_action_client = ActionClient(self, BasicControl, 'basic_control')
-        self.goto_control_client = ActionClient(self, GotoControl, 'goto_control')
-        self.tcp_twist_control_client = ActionClient(self, TCPTwistControl, 'tcp_twist_control')
+        super().__init__('legobuilder_planner_node')
+        self.lb_control_cli = ActionClient(self, LegobuilderCommand, 'legobuilder_command')
+        self.lb_control_send_goal_future = None # type: Future
+        self.lb_control_get_result_future = None # type: Future
+
 
         # Transform buffer subscriber
         self.tf_buffer = tf2_ros.Buffer()
@@ -27,10 +30,7 @@ class LegoBuilderPlannerNode(Node):
         )
 
     def get_ee_pose(self):
-        trans = self.tf_buffer.lookup_transform('base', 'tool0_controller', rclpy.Time())
-
-        orientation_q = trans.transform.rotation
-        orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
+        trans = self.tf_buffer.lookup_transform('base', 'tool0', rclpy.time.Time())
 
         axis_angle = -utils.quat_to_axis_angle([trans.transform.rotation.x, trans.transform.rotation.y,
                                                 trans.transform.rotation.z, trans.transform.rotation.w])
@@ -38,161 +38,158 @@ class LegoBuilderPlannerNode(Node):
         return [trans.transform.translation.x, trans.transform.translation.y, trans.transform.translation.z,
                 axis_angle[0], axis_angle[1], axis_angle[2]]
 
-    ### Basic Action Client ###
-    def basic_send_goal(self, goal : str):
-        goal_msg = BasicControl.Goal()
-        goal_msg.goal = goal
-
-        self.basic_action_client.wait_for_server()
-
-        return self.basic_action_client.send_goal_async(goal_msg)
-
-    def basic_goal_response_callback(self, future):
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().info('Goal (basic) rejected')
-            return
-        
-        self.get_logger().info('Goal (basic) accepted')
-        self._get_result_future = goal_handle.get_result_async()
-        self._get_result_future.add_done_callback(self.get_basic_result_callback)
-
-    def basic_get_result_callback(self, future):
-        result = future.result().result
-        self.get_logger().info(f'Result: {result.result}')
-
-    # def basic_feedback_callback(self, feedback_msg):
-    #   expect no feedback
-
     ### Goto Action Client ###
-    def goto_send_goal(self, goal : GotoGoal):
-        goal_msg = GotoControl.Goal()
-        goal_msg.goal = goal
+    def lb_control_send_goal(self, goal_msg : LegobuilderCommand.Goal):
+        self.lb_control_goal_terminated = False
         
-        self.goto_action_client.wait_for_server()
+        self.lb_control_cli.wait_for_server()
 
-        return self.goto_action_client.send_goal_async(goal_msg)
+        self.goto_send_goal_future = self.lb_control_cli.send_goal_async(
+            goal_msg, 
+            feedback_callback=self.lb_control_feedback_cb
+        )        
+        self.goto_send_goal_future.add_done_callback(self.lb_control_goal_response_cb)
 
-    def goto_goal_response_callback(self, future):
+
+    def lb_control_goal_response_cb(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
-            self.get_logger().info('Goal (basic) rejected')
+            self.get_logger().info('Goal (Goto) rejected')
             return
-        
-        self.get_logger().info('Goal (basic) accepted')
-        self._get_result_future = goal_handle.get_result_async()
-        self._get_result_future.add_done_callback(self.get_basic_result_callback)
-      
 
-    def goto_get_result_callback(self, future):
+        self.get_logger().info('Goal (Goto) accepted')
+
+        self.goto_get_result_future = goal_handle.get_result_async()
+        self.goto_get_result_future.add_done_callback(self.lb_control_get_result_cb)
+
+    def lb_control_get_result_cb(self, future):
+        self.lb_control_goal_terminated = True
         result = future.result().result
         self.get_logger().info(f'Result: {result.result}')
 
-    def goto_feedback_callback(self, feedback_msg):
+    def lb_control_feedback_cb(self, feedback_msg : LegobuilderCommand.Feedback):
         feedback = feedback_msg.feedback
-        self.get_logger().info('Received feedback: {0}'.format(feedback.partial_sequence))
-
-
-    ### TCP Twist Action Client ###
-    def tcp_twist_send_goal(self, goal : TwistGoal):
-        goal_msg = GotoControl.Goal()
-        goal_msg.goal = goal
-        
-        self.goto_action_client.wait_for_server()
-
-        return self.goto_action_client.send_goal_async(goal_msg)
-
-    def tcp_twist_goal_response_callback(self, future):
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().info('Goal (basic) rejected')
-            return
-        
-        self.get_logger().info('Goal (basic) accepted')
-        self._get_result_future = goal_handle.get_result_async()
-        self._get_result_future.add_done_callback(self.get_basic_result_callback)
-      
-
-    def tcp_twist_get_result_callback(self, future):
-        result = future.result().result
-        self.get_logger().info(f'Result: {result.result}')
-
-    def tcp_twist_feedback_callback(self, feedback_msg):
-        feedback = feedback_msg.feedback
-        self.get_logger().info('Received feedback: {0}'.format(feedback.partial_sequence))
+        self.get_logger().info(f'Completion percent: {feedback.completion_percent:0.2f}%')
 
     ### High level commands ###
     def home(self):
         self.get_logger().info(f'Homing robot')
-        future = self.basic_send_goal("home_arm")
-        rclpy.spin_until_future_complete(self, future)
-        #future = self.basic_send_goal("home_ee")
-        #rclpy.spin_until_future_complete(future)
+        goal = LegobuilderCommand.Goal()
+        goal.cmd = "home"
+        self.lb_control_send_goal(goal)
+        while not self.lb_control_goal_terminated:
+            rclpy.spin_once(self)
 
     def freedrive(self):
         self.get_logger().info(f'Enabling freedrive')
-        future = self.basic_send_goal("freedrive")
-        rclpy.spin_until_future_complete(self, future)
+        goal = LegobuilderCommand.Goal()
+        goal.cmd = "freedrive"
+        self.lb_control_send_goal(goal)
+        while not self.lb_control_goal_terminated:
+            rclpy.spin_once(self)
 
-    def goto_pose(self, ee_pose : list[float], wrench_thresh=None, timeout=None):
-        self.get_logger().info(f'Goto {ee_pose}')
-        goal = GotoGoal()
-        goal.ee_pose = ee_pose
-        goal.joint_states = JointState()
+    # def enable_freedrive(self)
+    # def disable_freedrive(self)
+
+    def goto_joints_deg(self, joint_positions_deg : list[float], wrench_thresh=None, time=None):
+        self.get_logger().info(f"Goto {[f'{val:0.2f}' for val in joint_positions_deg]}")
+        goal = LegobuilderCommand.Goal()
+        goal.cmd = 'goto_joints_deg'
+        goal.joint_positions = joint_positions_deg
         goal.wrench_thresh = Wrench()
         goal.use_ft = False
-        goal.timeout = 0
-        goal.use_ft = False
+        goal.time = 0.0
+        goal.use_time = False
+
         if wrench_thresh is not None:
             goal.use_ft = True
             goal.wrench_thresh = wrench_thresh
-        if timeout is not None:
-            goal.timeout = timeout
-            goal.use_timeout = True
-        future = self.goto_send_goal(goal)
-        rclpy.spin_until_future_complete(self, future)
+        if time is not None:
+            goal.time = time
+            goal.use_time = True
+        self.lb_control_send_goal(goal)
+
+        while not self.lb_control_goal_terminated:
+            rclpy.spin_once(self)
+
+    def goto_TCP(self, ee_pose : list[float], wrench_thresh=None, time=None):
+        self.get_logger().info(f"Goto {[f'{val:0.2f}' for val in ee_pose]}")
+        goal = LegobuilderCommand.Goal()
+        goal.cmd = 'goto_TCP'
+        goal.ee_pose = ee_pose
+        goal.wrench_thresh = Wrench()
+        goal.use_ft = False
+        goal.time = 0.0
+        goal.use_time = False
+
+        if wrench_thresh is not None:
+            goal.use_ft = True
+            goal.wrench_thresh = wrench_thresh
+        if time is not None:
+            goal.time = time
+            goal.use_time = True
+        self.lb_control_send_goal(goal)
+
+        while not self.lb_control_goal_terminated:
+            rclpy.spin_once(self)
 
     def rotate_TCP(self, axis, angle):
         self.get_logger().info(f'Rotate {axis}, {angle}')
-        goal = TwistGoal()
-        goal.policy = "rotate"
+        goal = LegobuilderCommand.Goal()
+        goal.cmd = "rotate"
         goal.axis = axis
         goal.angle = angle
-        future = self.tcp_twist_send_goal(goal)
-        rclpy.spin_until_future_complete(self, future)
+        self.lb_control_send_goal(goal)
+
+    # def move_TCP(self, displacement)
+
+
 
 
 def demo1(args=None):
-    BRICK_HEIGHT = 0.096
+    BRICK_HEIGHT = 0.0096
+    registration_pose_preset = [0.15, -0.50, 0.04, \
+                                -2.9, 1.2, -0.0]
     num_trials = 10
     # directory_path = 'path/to/datastore'
     rclpy.init(args=args)
 
     lb_planner_node = LegoBuilderPlannerNode()
 
-    # basic: set_tcp
-    # basic: home_arm
+    # Set TCP
+    # TODO - implement set_TCP
+
+    # Home system
     lb_planner_node.home()
-    # basic: freedrive
-    lb_planner_node.freedrive()
-    # ioctl: wait for human to move robot to origin blocks
+
+    # Freedrive to registration pose
+    # TODO - Improve freedrive
+    # lb_planner_node.enable(freedrive)
+    lb_planner_node.goto_TCP(
+        registration_pose_preset,
+        wrench_thresh=None,
+        time=10.0
+    )
     print("Freedrive enabled, move end effector to registration brick")
     _ = input("Press 'Enter' to continue")
-    # state sub: record registration pose
+    # lb_planner_node.disable(freedrive)
+
+    # Record registration pose
     registration_pose = lb_planner_node.get_ee_pose()
     block_pose = registration_pose
-    # override without real freedrive
-    block_pose = [0.12859122581391358, -0.5526477938788351, 0.015143098090133963, -2.9024186136539276, 1.2023166270087013, -0.000011600763336924778]
     # goto: move to raised position
-    waypoint_1 = registration_pose + [0, 0, 5*BRICK_HEIGHT, 0, 0, 0]
-    lb_planner_node.goto_pose(waypoint_1)
+    waypoint_1 = [block_pose[0], block_pose[1], block_pose[2] + 5*BRICK_HEIGHT,
+                  block_pose[3], block_pose[4], block_pose[5]]
+    lb_planner_node.goto_TCP(waypoint_1)
+    T.sleep(1)
     
     # for trial in num_trials:
-    for trial in num_trials:
+    for trial in range(num_trials):
         # perception srv: get lego bboxes
         # planning...
         # goto: move for pick
-        lb_planner_node.goto_pose(block_pose)
+        lb_planner_node.goto_TCP(block_pose)
+        T.sleep(1)
         # brickpick srv: set moment plate
         # basic: set_tcp
         # tcp twist: break for pick
@@ -200,6 +197,7 @@ def demo1(args=None):
             axis=[0, 1, 0],
             angle=30
         )
+        T.sleep(1)
         # goto: withdraw for pick
         # brickpick srv: withdraw for pick
 

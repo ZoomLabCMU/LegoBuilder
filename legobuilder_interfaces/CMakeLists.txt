@@ -16,8 +16,6 @@ find_package(rosidl_default_generators REQUIRED)
 
 set(msg_files
   "msg/BoundingBox.msg"
-  "msg/GotoGoal.msg"
-  "msg/TwistGoal.msg"
 )
 
 set(srv_files
@@ -26,9 +24,7 @@ set(srv_files
 )
 
 set(action_files
-  "action/BasicControl.action"
-  "action/GotoControl.action"
-  "action/TCPTwistControl.action"
+  "action/LegobuilderCommand.action"
 )
 
 rosidl_generate_interfaces(${PROJECT_NAME}

@@ -2,32 +2,31 @@
 
 import rclpy
 from rclpy.node import Node
+from rclpy.executors import MultiThreadedExecutor
+import rclpy.time
 
 import tf2_ros
+import numpy as np
 from cv_bridge import CvBridge
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import WrenchStamped, Wrench, Twist
 from sensor_msgs.msg import JointState
 
-from legobuilder_interfaces.msg import GotoGoal, TwistGoal
+# from legobuilder_interfaces.msg import 
 from legobuilder_interfaces.srv import BrickpickCommand
-from legobuilder_interfaces.action import BasicControl, GotoControl, TCPTwistControl
+from legobuilder_interfaces.action import LegobuilderCommand
 
 from rclpy.action import ActionServer, GoalResponse, CancelResponse
 
 import os
-import time
+import time as T
+import threading
 import signal
 import sys
 import argparse
 from legobuilder_control.Controllers import URController, BrickPickController, utils
-#from legobuilder_perception.LegoDetector import Detectron2
 
-import random
-from legobuilder_control.utils import save_rgb, save_proprioceptive
-
-import pickle
 
 clicks = []
 tool_height = 0.08
@@ -43,7 +42,7 @@ class LegoBuilderControlNode(Node):
         # State Estimation
         self.joint_states = JointState()
         self.ee_wrench = WrenchStamped()
-        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_buffer = tf2_ros.Buffer(cache_time=rclpy.time.Duration(seconds=1))
 
         # BrickPick adapter client
         self.brickpick_adapter_cli = self.create_client(
@@ -73,7 +72,7 @@ class LegoBuilderControlNode(Node):
         # Transform buffer subscriber
         self.tf_buffer_sub = tf2_ros.TransformListener(
             self.tf_buffer,
-            self
+            self,
         )
         '''
         # Realsense subscriber
@@ -84,35 +83,15 @@ class LegoBuilderControlNode(Node):
         '''
 
         ### Action Servers ###
-        # Basic actions
-        self.basic_goal = BasicControl.Goal()
+        # Control actions
+        self.control_goal = LegobuilderCommand.Goal()
         self.basic_action_server = ActionServer(
             self,
-            BasicControl,
-            'basic_control',
-            execute_callback=self.basic_execute_callback,
-            goal_callback=self.basic_goal_callback,
-            cancel_callback=self.cancel_callback
-        )
-        # Goto actions
-        self.goto_goal = GotoControl.Goal()
-        self.goto_action_server = ActionServer(
-            self,
-            GotoControl,
-            'goto_control',
-            execute_callback=self.goto_execute_callback,
-            goal_callback=self.goto_goal_callback,
-            cancel_callback=self.cancel_callback
-        )
-        # TCP twist actions
-        self.tcp_twist_goal = TCPTwistControl.Goal()
-        self.tcp_twist_action_server = ActionServer(
-            self,
-            TCPTwistControl,
-            'tcp_twist_control',
-            execute_callback=self.tcp_twist_execute_callback,
-            goal_callback=self.tcp_twist_goal_callback,
-            cancel_callback=self.cancel_callback
+            LegobuilderCommand,
+            'legobuilder_command',
+            execute_callback=self.execute_cb,
+            goal_callback=self.goal_cb,
+            cancel_callback=self.cancel_cb
         )
 
         # Actuation
@@ -129,40 +108,47 @@ class LegoBuilderControlNode(Node):
         return True
     
     def get_ee_pose(self):
-        trans = self.tf_buffer.lookup_transform('base', 'tool0_controller', rclpy.Time())
-
-        orientation_q = trans.transform.rotation
-        orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
-
+        trans = self.tf_buffer.lookup_transform('base', 'tool0', rclpy.time.Time())
         axis_angle = -utils.quat_to_axis_angle([trans.transform.rotation.x, trans.transform.rotation.y,
                                                 trans.transform.rotation.z, trans.transform.rotation.w])
 
         return [trans.transform.translation.x, trans.transform.translation.y, trans.transform.translation.z,
                 axis_angle[0], axis_angle[1], axis_angle[2]]
 
-    def cancel_callback(self, goal_handle):
+    def cancel_cb(self, goal_handle):
         # Accepts or rejects a client request to cancel an action
         self.get_logger().info('Received cancel request')
         return CancelResponse.ACCEPT
     
-    def basic_goal_callback(self, goal_request):
+    def goal_cb(self, goal_request):
         # Accepts or rejects a client request to begin an action
-        self.get_logger().info('Recieved (basic) goal request')
-        self.basic_goal = goal_request
+        self.get_logger().info(f'Recieved goal request: ???')
+        self.control_goal = goal_request
         return GoalResponse.ACCEPT
 
-    def basic_execute_callback(self, goal_handle):
-        self.get_logger().info('Executing basic control goal...')
-        cmd = self.basic_goal.goal
+    def execute_cb(self, goal_handle):
+        self.get_logger().info(f'Executing control goal...')
+        goal = self.control_goal
+        cmd = goal.cmd
         if cmd == "freedrive":
-            self.ur_controller.freedrive()
+            self.ur_controller.freedrive(time=goal.time)
+            result = LegobuilderCommand.Result()
+            goal_handle.succeed()
+            result.result = "Complete"
         elif cmd == "stop":
             self.ur_controller.stop()
             self.bp_controller.stop()
-        elif cmd == "home_arm":
-            self.ur_controller.home_arm()
-        elif cmd == "home_ee":
-            self.bp_controller.reset()
+            result = LegobuilderCommand.Result()
+            goal_handle.succeed()
+            result.result = "Complete"
+        elif cmd == "home":
+            # self.bp_controller.reset()
+            home_joint_angles = [90.0, -90.0, 90.0, -90.0, -90.0, -135.0]
+            self.control_goal.joint_positions = home_joint_angles
+            self.control_goal.use_time = True
+            self.control_goal.time = 10.0
+            self.control_goal.use_ft = False
+            result = self.goto_joints_deg_execution(goal_handle)
         elif cmd == "activate_FT":
             task_frame=None
             selection_vector=None
@@ -170,146 +156,139 @@ class LegoBuilderControlNode(Node):
             limits=None
             time=None
             self.ur_controller.force_mode(task_frame, selection_vector, wrench, limits, time)
+            goal_handle.succeed()
+            result = LegobuilderCommand.Result()
+            result.result = "Complete"
         elif cmd == "deactivate_FT":
             self.ur_controller.end_force_mode()
+            goal_handle.succeed()
+            result = LegobuilderCommand.Result()
+            result.result = "Complete"
         elif cmd == "zero_FT":
             self.ur_controller.zero_ft_sensor()
+            goal_handle.succeed()
+            result = LegobuilderCommand.Result()
+            result.result = "Complete"
+        elif cmd == "goto_TCP":
+            result = self.goto_TCP_execution(goal_handle)
+        elif cmd == "goto_joints_deg":
+            result = self.goto_joints_deg_execution(goal_handle)
         else:
             raise NotImplementedError
-        goal_handle.succeed()
-
-        result = BasicControl.Result()
-        result.result = "complete"
         return result
 
-    def goto_goal_callback(self, goal_request):
-        self.get_logger().info('Received (goto) goal request')
-        self.goto_goal = goal_request
-        return GoalResponse.ACCEPT
-    
-    def goto_execute_callback(self, goal_handle):
-        # TODO - separate time and timeout?
-        goto_msg = self.goto_goal.goal # type: GotoGoal
-        goal_ee_pose = goto_msg.ee_pose
-        goal_joint_states = goto_msg.joint_states
-        policy = goto_msg.policy
-        timeout = goto_msg.timeout
-        use_timeout = goto_msg.use_timeout
-        wrench_thresh = goto_msg.wrench_thresh
-        use_ft = goto_msg.use_ft
-        # Read policy and time to generate ur command
-        if policy == "move_ee":
-            if use_timeout:
-                self.ur_controller.move_ee(goal_ee_pose, time=timeout)
-            else:
-                self.ur_controller.move_ee(goal_ee_pose)
-        elif policy == "move_joints":
-            if use_timeout:
-                self.ur_controller.move_joints_in_radians(goal_joint_states, time=timeout)
-            else:
-                self.ur_controller.move_joints_in_radians(goal_joint_states)
-        else:
-            raise NotImplementedError
+    def goto_joints_deg_execution(self, goal_handle):
+        self.get_logger().info("Executing 'goto_joints_deg' control goal...")
+        # Read goal parameters
+        goal_msg = self.control_goal # type: LegobuilderCommand.Goal
+        goal_joint_positions_deg = goal_msg.joint_positions
+        time = goal_msg.time
+        wrench_thresh = goal_msg.wrench_thresh
+        use_time = goal_msg.use_time
+        use_ft = goal_msg.use_ft
         
-        start_state = self.joint_states
-        end_state = goal_joint_states
-        result = GotoControl.Result()
-        t_start = time.time()
-        # Loop monitoring time, ee_wrench, and motion progress for exit
-        # Publish motion progress as feedback
+        # Publish UR move script
+        if use_time:
+            timeout = 1.5 * time
+            self.ur_controller.move_joints_in_degrees(goal_joint_positions_deg, time=time)
+        else:
+            self.ur_controller.move_joints_in_degrees(goal_joint_positions_deg)
+        
+        start_state = np.asarray(self.joint_states.position) * (180/np.pi)
+        end_state = np.asarray(goal_joint_positions_deg)
+
+        result = LegobuilderCommand.Result()
+        t_start = T.time()
+        # Loop and spin node for feedback
         while (rclpy.ok()):
             # Force-Torque exit condition
             if use_ft and (abs(self.ee_wrench) > wrench_thresh):
                 self.ur_controller.stop()
                 result.result = "Force-Torque limit exceeded"
-                return result
+                break
             # Timeout exit condition
-            if use_timeout and ((time.time() - t_start) > timeout):
+            if use_time and ((T.time() - t_start) > timeout):
                 self.ur_controller.stop()
                 result.result = f"Move timed out ({timeout:0.1f} s)"
-                return result
+                break
 
-            curr_state = self.joint_states
-            # Mean percent completed accross all joints
-            completion_percent = 100.0 * (1/6) * sum((curr_state-start_state)**2/(end_state-start_state)**2)
-            feedback_msg = GotoControl.Feedback()
+            curr_state = np.asarray(self.joint_states.position) * (180/np.pi)
+            completion_percent = 100.0 * np.mean(abs(curr_state-start_state)/abs(end_state-start_state))
 
             # Move complete exit condition
             if completion_percent > self.motion_completion_thresh:
                 result.result = "Motion complete"
                 break
-            feedback_msg.feedback = completion_percent
-            goal_handle.publish_feedback(feedback_msg)
-            time.sleep(0.1)
 
+            feedback_msg = LegobuilderCommand.Feedback()
+            feedback_msg.completion_percent = completion_percent
+            goal_handle.publish_feedback(feedback_msg)
+
+            T.sleep(0.1)
         goal_handle.succeed()
         return result
-    
-    def tcp_twist_goal_callback(self, goal_request):
-        self.get_logger().info('Received (tcp_twist) goal request')
-        self.tcp_twist_goal = goal_request
-        return GoalResponse.ACCEPT
-    
-    def tcp_twist_execute_callback(self, goal_handle):
-        # Displace the tcp by a given twist in the world coordinate frame
-        tcp_twist_msg = self.tcp_twist_goal.goal # type: TwistGoal
-        displacement = tcp_twist_msg.displacement
-        axis = tcp_twist_msg.axis
-        angle = tcp_twist_msg.angle
-        policy = tcp_twist_msg.policy
-        wrench_thresh = tcp_twist_msg.wrench_thresh
-        use_ft = tcp_twist_msg.use_ft
 
-        ee_pos = self.get_ee_pose()
-
-        if policy == "move":
-            new_ee_pos = [ee_pos[0] + displacement[0],
-                          ee_pos[1] + displacement[1],
-                          ee_pos[2] + displacement[2],
-                          ee_pos[3], ee_pos[4], ee_pos[5]]
-            self.ur_controller.move_ee(new_ee_pos)
-        elif policy == "rotate":
-            axis_angle = [ee_pos[3], ee_pos[4], ee_pos[5]]
-            final_axis_angle = utils.rotate_around_axis(axis_angle, axis, angle)
-            new_ee_pos = [ee_pos[0], ee_pos[1], ee_pos[2], final_axis_angle[0], final_axis_angle[1], final_axis_angle[2]]
-            self.ur_controller.move_ee(new_ee_pos)
-        else:
-            raise NotImplementedError
+    def goto_TCP_execution(self, goal_handle):
+        self.get_logger().info("Executing 'goto_TCP' control goal...")
+        # Read goal parameters
+        goal_msg = self.control_goal # type: LegobuilderCommand.Goal
+        goal_ee_pose = goal_msg.ee_pose
+        time = goal_msg.time
+        wrench_thresh = goal_msg.wrench_thresh
+        use_time = goal_msg.use_time
+        use_ft = goal_msg.use_ft
         
-        start_state = ee_pos
-        end_state = new_ee_pos
-        result = GotoControl.Result()
-        # Loop monitoring ee_wrench and motion progress for exit
-        # Publish motion progress as feedback
+        # Publish UR move script
+        if use_time:
+            timeout = 1.5 * time
+            self.ur_controller.move_ee(goal_ee_pose, time=time)
+        else:
+            self.ur_controller.move_ee(goal_ee_pose)
+        
+        start_state = np.asarray(self.get_ee_pose())
+        end_state = np.asarray(goal_ee_pose)
+
+        result = LegobuilderCommand.Result()
+        t_start = T.time()
+        # Loop and spin node for feedback
         while (rclpy.ok()):
             # Force-Torque exit condition
             if use_ft and (abs(self.ee_wrench) > wrench_thresh):
                 self.ur_controller.stop()
                 result.result = "Force-Torque limit exceeded"
-                return result
+                break
+            # Timeout exit condition
+            if use_time and ((T.time() - t_start) > timeout):
+                self.ur_controller.stop()
+                result.result = f"Move timed out ({timeout:0.1f} s)"
+                break
 
-            curr_state = self.joint_states
-            # Mean percent completed accross all joints
-            completion_percent = 100.0 * (1/6) * sum((curr_state-start_state)**2/(end_state-start_state)**2)
-            feedback_msg = GotoControl.Feedback()
+            curr_state = np.asarray(self.get_ee_pose())
+            completion_percent = 100.0 * np.mean(
+                abs(curr_state[0:3]-start_state[0:3])/abs(end_state[0:3]-start_state[0:3]))
 
             # Move complete exit condition
             if completion_percent > self.motion_completion_thresh:
                 result.result = "Motion complete"
                 break
-            feedback_msg.feedback = completion_percent
-            goal_handle.publish_feedback(feedback_msg)
-            time.sleep(0.1)
 
+            feedback_msg = LegobuilderCommand.Feedback()
+            feedback_msg.completion_percent = completion_percent
+            goal_handle.publish_feedback(feedback_msg)
+
+            T.sleep(0.1)
         goal_handle.succeed()
         return result
+    
 
 def main(args=None):
     rclpy.init(args=args)
 
     lb_control_node = LegoBuilderControlNode()
 
-    rclpy.spin(lb_control_node)
+    executor = MultiThreadedExecutor()
+
+    rclpy.spin(lb_control_node, executor=executor)
 
     lb_control_node.destroy_node()
     rclpy.shutdown()
