@@ -134,6 +134,7 @@ class LegoBuilderPlannerNode(Node):
         if time is not None:
             goal.time = time
             goal.use_time = True
+
         self.lb_control_send_goal(goal)
 
         while not self.lb_control_goal_terminated:
@@ -145,7 +146,11 @@ class LegoBuilderPlannerNode(Node):
         goal.cmd = "rotate_TCP"
         goal.axis = axis
         goal.angle = angle_deg * (np.pi/180)
-        
+        goal.wrench_thresh = Wrench()
+        goal.use_ft = False
+        goal.time = 0.0
+        goal.use_time = False
+
         if wrench_thresh is not None:
             goal.use_ft = True
             goal.wrench_thresh = wrench_thresh
@@ -164,6 +169,10 @@ class LegoBuilderPlannerNode(Node):
         goal = LegobuilderCommand.Goal()
         goal.cmd = "move_TCP"
         goal.displacement = displacement
+        goal.wrench_thresh = Wrench()
+        goal.use_ft = False
+        goal.time = 0.0
+        goal.use_time = False
 
         if wrench_thresh is not None:
             goal.use_ft = True
@@ -182,6 +191,9 @@ def demo1(args=None):
     BRICK_HEIGHT = 0.0096
     registration_pose_preset = [0.15, -0.50, 0.04, \
                                 -2.9, 1.2, -0.0]
+    # registration_pose_preset[3] = -3.33435357
+    # registration_pose_preset[4] = 1.38035729
+    # registration_pose_preset[5] = -0.36986562
     num_trials = 5
     # directory_path = 'path/to/datastore'
     rclpy.init(args=args)
@@ -225,6 +237,12 @@ def demo1(args=None):
         # Move to pick location
         lb_planner_node.goto_TCP(block_pose)
         T.sleep(1)
+
+        lb_planner_node.move_TCP(
+            displacement=[0.0, 0.0, 0.0200],
+            time=5.0
+        )
+        T.sleep(1)
         # brickpick srv: set moment plate
         # basic: set_tcp
         # Rotate TCP to break
@@ -233,11 +251,19 @@ def demo1(args=None):
             angle_deg=-30.0,
             time=5.0
         )
+        T.sleep(1)
+        lb_planner_node.rotate_TCP_deg(
+            axis=[1.0, 0.0, 0.0],
+            angle_deg=30.0,
+            time=5.0
+        )
+        T.sleep(1)
         # Raise TCP to pick
         lb_planner_node.move_TCP(
             displacement=[0.0, 0.0, 0.0200],
             time=5.0
         )
+        T.sleep(1)
         lb_planner_node.goto_TCP(waypoint_1, time=2.0)
         T.sleep(5)
         # brickpick srv: withdraw for pick

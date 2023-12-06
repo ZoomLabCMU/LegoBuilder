@@ -94,8 +94,7 @@ class LegoBuilderControlNode(Node):
             'legobuilder_command',
             execute_callback=self.execute_cb,
             goal_callback=self.goal_cb,
-            cancel_callback=self.cancel_cb,
-            callback_group=ReentrantCallbackGroup()
+            cancel_callback=self.cancel_cb
         )
 
         # Actuation
@@ -141,7 +140,7 @@ class LegoBuilderControlNode(Node):
         self.control_goal = goal_request
         return GoalResponse.ACCEPT
 
-    async def execute_cb(self, goal_handle):
+    def execute_cb(self, goal_handle):
         self.get_logger().info(f'Executing control goal...')
         goal = self.control_goal
         cmd = goal.cmd
@@ -220,7 +219,7 @@ class LegoBuilderControlNode(Node):
         
         start_state = np.asarray(self.get_joint_positions())
         end_state = np.asarray(goal_joint_positions_deg) * np.pi/180
-        start_dist = np.sqrt(np.sum((start_state[0:4] - end_state[0:4])**2)) + 10E-7
+        start_dist = np.sqrt(np.sum((start_state - end_state)**2)) + 10E-7
 
         result = LegobuilderCommand.Result()
         t_start = T.time()
@@ -238,7 +237,7 @@ class LegoBuilderControlNode(Node):
                 break
 
             curr_state = np.asarray(self.get_joint_positions())
-            curr_dist = np.sqrt(np.sum((curr_state[0:4] - end_state[0:4])**2))
+            curr_dist = np.sqrt(np.sum((curr_state - end_state)**2))
             completion_percent = 100.0 * (start_dist - curr_dist)/start_dist
 
             # Move complete exit condition
@@ -310,7 +309,7 @@ class LegoBuilderControlNode(Node):
     def rotate_TCP_execution(self, goal_handle):
         self.get_logger().info("Executing 'rotate_TCP' control goal...")
         # Get goal parameters
-        goal_msg = self.control_goal
+        goal_msg = self.control_goal # type: LegobuilderCommand.Goal
         axis = goal_msg.axis
         angle = goal_msg.angle
         time = goal_msg.time
@@ -319,12 +318,12 @@ class LegoBuilderControlNode(Node):
         use_ft = goal_msg.use_ft
 
         # Get current pose
-        ee_pos = self.get_ee_pose()
-        axis_angle = np.asarray([ee_pos[3], ee_pos[4], ee_pos[5]])
+        ee_pose = self.get_ee_pose()
+        axis_angle = [ee_pose[3], ee_pose[4], ee_pose[5]]
 
         # Compute new pose
         final_axis_angle = utils.rotate_around_axis(axis_angle, axis, angle)
-        goal_ee_pose = [ee_pos[0], ee_pos[1], ee_pos[2], final_axis_angle[0][0], final_axis_angle[1][0], final_axis_angle[2][0]]
+        goal_ee_pose = [ee_pose[0], ee_pose[1], ee_pose[2], final_axis_angle[0][0], final_axis_angle[1][0], final_axis_angle[2][0]]
 
         # Publish UR move script
         if use_time:
@@ -393,7 +392,6 @@ class LegoBuilderControlNode(Node):
         start_dist = np.sqrt(np.sum((start_state[0:3] - end_state[0:3])**2)) + 10E-7
 
         # Publish UR move script
-        self.get_logger().info(f"\n{ee_pose}\n{goal_ee_pose}")
         if use_time:
             timeout = 1.5 * time
             self.ur_controller.move_ee(goal_ee_pose, time=time)
