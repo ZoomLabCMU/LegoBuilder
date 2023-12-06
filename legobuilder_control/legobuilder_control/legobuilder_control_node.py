@@ -18,6 +18,7 @@ from legobuilder_interfaces.srv import BrickpickCommand
 from legobuilder_interfaces.action import LegobuilderCommand
 
 from rclpy.action import ActionServer, GoalResponse, CancelResponse
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 import os
 import time as T
@@ -38,6 +39,8 @@ class LegoBuilderControlNode(Node):
     def __init__(self):
         super().__init__('Legobuilder_control_node') # type: ignore
         self.motion_completion_thresh = 99.5
+        self.motion_tolerance_thresh_m = 0.0005 # m
+        self.motion_tolerance_thresh_rad = 0.001
 
         # State Estimation
         self.joint_states = JointState()
@@ -91,7 +94,8 @@ class LegoBuilderControlNode(Node):
             'legobuilder_command',
             execute_callback=self.execute_cb,
             goal_callback=self.goal_cb,
-            cancel_callback=self.cancel_cb
+            cancel_callback=self.cancel_cb,
+            callback_group=ReentrantCallbackGroup()
         )
 
         # Actuation
@@ -115,6 +119,17 @@ class LegoBuilderControlNode(Node):
         return [trans.transform.translation.x, trans.transform.translation.y, trans.transform.translation.z,
                 axis_angle[0], axis_angle[1], axis_angle[2]]
 
+    def get_joint_positions(self):
+        joint_states = self.joint_states
+        D = dict()
+        for i in range(len(joint_states.name)):
+            D[joint_states.name[i]] = joint_states.position[i]
+        joint_positions = [
+            D['shoulder_pan_joint'], D['shoulder_lift_joint'], D['elbow_joint'],\
+            D['wrist_1_joint'], D['wrist_2_joint'], D['wrist_3_joint']
+        ]
+        return joint_positions
+
     def cancel_cb(self, goal_handle):
         # Accepts or rejects a client request to cancel an action
         self.get_logger().info('Received cancel request')
@@ -126,12 +141,17 @@ class LegoBuilderControlNode(Node):
         self.control_goal = goal_request
         return GoalResponse.ACCEPT
 
-    def execute_cb(self, goal_handle):
+    async def execute_cb(self, goal_handle):
         self.get_logger().info(f'Executing control goal...')
         goal = self.control_goal
         cmd = goal.cmd
-        if cmd == "freedrive":
-            self.ur_controller.freedrive(time=goal.time)
+        if cmd == "enable_freedrive":
+            self.ur_controller.enable_freedrive()
+            result = LegobuilderCommand.Result()
+            goal_handle.succeed()
+            result.result = "Complete"
+        elif cmd == "disable_freedrive":
+            self.ur_controller.disable_freedrive()
             result = LegobuilderCommand.Result()
             goal_handle.succeed()
             result.result = "Complete"
@@ -169,10 +189,14 @@ class LegoBuilderControlNode(Node):
             goal_handle.succeed()
             result = LegobuilderCommand.Result()
             result.result = "Complete"
-        elif cmd == "goto_TCP":
-            result = self.goto_TCP_execution(goal_handle)
         elif cmd == "goto_joints_deg":
             result = self.goto_joints_deg_execution(goal_handle)
+        elif cmd == "goto_TCP":
+            result = self.goto_TCP_execution(goal_handle)
+        elif cmd == "rotate_TCP":
+            result = self.rotate_TCP_execution(goal_handle)
+        elif cmd == "move_TCP":
+            result = self.move_TCP_execution(goal_handle)
         else:
             raise NotImplementedError
         return result
@@ -194,8 +218,9 @@ class LegoBuilderControlNode(Node):
         else:
             self.ur_controller.move_joints_in_degrees(goal_joint_positions_deg)
         
-        start_state = np.asarray(self.joint_states.position) * (180/np.pi)
-        end_state = np.asarray(goal_joint_positions_deg)
+        start_state = np.asarray(self.get_joint_positions())
+        end_state = np.asarray(goal_joint_positions_deg) * np.pi/180
+        start_dist = np.sqrt(np.sum((start_state[0:4] - end_state[0:4])**2)) + 10E-7
 
         result = LegobuilderCommand.Result()
         t_start = T.time()
@@ -212,11 +237,12 @@ class LegoBuilderControlNode(Node):
                 result.result = f"Move timed out ({timeout:0.1f} s)"
                 break
 
-            curr_state = np.asarray(self.joint_states.position) * (180/np.pi)
-            completion_percent = 100.0 * np.mean(abs(curr_state-start_state)/abs(end_state-start_state))
+            curr_state = np.asarray(self.get_joint_positions())
+            curr_dist = np.sqrt(np.sum((curr_state[0:4] - end_state[0:4])**2))
+            completion_percent = 100.0 * (start_dist - curr_dist)/start_dist
 
             # Move complete exit condition
-            if completion_percent > self.motion_completion_thresh:
+            if curr_dist < self.motion_tolerance_thresh_rad:
                 result.result = "Motion complete"
                 break
 
@@ -247,6 +273,7 @@ class LegoBuilderControlNode(Node):
         
         start_state = np.asarray(self.get_ee_pose())
         end_state = np.asarray(goal_ee_pose)
+        start_dist = np.sqrt(np.sum((start_state[0:3] - end_state[0:3])**2))
 
         result = LegobuilderCommand.Result()
         t_start = T.time()
@@ -264,11 +291,11 @@ class LegoBuilderControlNode(Node):
                 break
 
             curr_state = np.asarray(self.get_ee_pose())
-            completion_percent = 100.0 * np.mean(
-                abs(curr_state[0:3]-start_state[0:3])/abs(end_state[0:3]-start_state[0:3]))
+            curr_dist = np.sqrt(np.sum((curr_state[0:3] - end_state[0:3])**2))
+            completion_percent = 100.0 * (start_dist - curr_dist) / start_dist
 
             # Move complete exit condition
-            if completion_percent > self.motion_completion_thresh:
+            if curr_dist < self.motion_tolerance_thresh_m:
                 result.result = "Motion complete"
                 break
 
@@ -280,6 +307,130 @@ class LegoBuilderControlNode(Node):
         goal_handle.succeed()
         return result
     
+    def rotate_TCP_execution(self, goal_handle):
+        self.get_logger().info("Executing 'rotate_TCP' control goal...")
+        # Get goal parameters
+        goal_msg = self.control_goal
+        axis = goal_msg.axis
+        angle = goal_msg.angle
+        time = goal_msg.time
+        wrench_thresh = goal_msg.wrench_thresh
+        use_time = goal_msg.use_time
+        use_ft = goal_msg.use_ft
+
+        # Get current pose
+        ee_pos = self.get_ee_pose()
+        axis_angle = np.asarray([ee_pos[3], ee_pos[4], ee_pos[5]])
+
+        # Compute new pose
+        final_axis_angle = utils.rotate_around_axis(axis_angle, axis, angle)
+        goal_ee_pose = [ee_pos[0], ee_pos[1], ee_pos[2], final_axis_angle[0][0], final_axis_angle[1][0], final_axis_angle[2][0]]
+
+        # Publish UR move script
+        if use_time:
+            timeout = 1.5 * time
+            self.ur_controller.move_ee(goal_ee_pose, time=time)
+        else:
+            self.ur_controller.move_ee(goal_ee_pose)
+        
+        start_state = np.asarray(self.get_ee_pose())
+        end_state = np.asarray(goal_ee_pose)
+        start_dist = np.sqrt(np.sum((start_state[3:6] - end_state[3:6])**2)) + 10E-7
+
+        result = LegobuilderCommand.Result()
+        t_start = T.time()
+        # Loop and spin node for feedback
+        while (rclpy.ok()):
+            # Force-Torque exit condition
+            if use_ft and (abs(self.ee_wrench) > wrench_thresh):
+                self.ur_controller.stop()
+                result.result = "Force-Torque limit exceeded"
+                break
+            # Timeout exit condition
+            if use_time and ((T.time() - t_start) > timeout):
+                self.ur_controller.stop()
+                result.result = f"Move timed out ({timeout:0.1f} s)"
+                break
+
+            curr_state = np.asarray(self.get_ee_pose())
+            curr_dist = np.sqrt(np.sum((curr_state[3:6] - end_state[3:6])**2))
+
+            self.get_logger().info(f"\n{start_state[3:6]}\n{curr_state[3:6]}\n{end_state[3:6]}\n{curr_dist}\n{start_dist}")
+            completion_percent = 100.0 * (start_dist - curr_dist) / start_dist
+            # Move complete exit condition
+            if curr_dist < self.motion_tolerance_thresh_rad:
+                result.result = "Motion complete"
+                break
+
+            feedback_msg = LegobuilderCommand.Feedback()
+            feedback_msg.completion_percent = completion_percent
+            goal_handle.publish_feedback(feedback_msg)
+
+            T.sleep(0.1)
+        goal_handle.succeed()
+        return result
+
+    def move_TCP_execution(self, goal_handle):
+        self.get_logger().info("Executing 'move_TCP' control goal...")
+        # Get goal parameters
+        goal_msg = self.control_goal
+        displacement = goal_msg.displacement
+        time = goal_msg.time
+        wrench_thresh = goal_msg.wrench_thresh
+        use_time = goal_msg.use_time
+        use_ft = goal_msg.use_ft
+
+        # Get current pose
+        ee_pose = self.get_ee_pose()
+        # Compute new pose
+        goal_ee_pose = [ee_pose[0] + displacement[0],
+                        ee_pose[1] + displacement[1], 
+                        ee_pose[2] + displacement[2], 
+                        ee_pose[3], ee_pose[4], ee_pose[5]]
+        
+        start_state = np.asarray(self.get_ee_pose())
+        end_state = np.asarray(goal_ee_pose)
+        start_dist = np.sqrt(np.sum((start_state[0:3] - end_state[0:3])**2)) + 10E-7
+
+        # Publish UR move script
+        self.get_logger().info(f"\n{ee_pose}\n{goal_ee_pose}")
+        if use_time:
+            timeout = 1.5 * time
+            self.ur_controller.move_ee(goal_ee_pose, time=time)
+        else:
+            self.ur_controller.move_ee(goal_ee_pose)
+    
+        result = LegobuilderCommand.Result()
+        t_start = T.time()
+        # Loop and spin node for feedback
+        while (rclpy.ok()):
+            # Force-Torque exit condition
+            if use_ft and (abs(self.ee_wrench) > wrench_thresh):
+                self.ur_controller.stop()
+                result.result = "Force-Torque limit exceeded"
+                break
+            # Timeout exit condition
+            if use_time and ((T.time() - t_start) > timeout):
+                self.ur_controller.stop()
+                result.result = f"Move timed out ({timeout:0.1f} s)"
+                break
+
+            curr_state = np.asarray(self.get_ee_pose())
+            curr_dist = np.sqrt(np.sum((curr_state[0:3] - end_state[0:3])**2))
+            completion_percent = 100.0 * (start_dist - curr_dist) / start_dist
+
+            feedback_msg = LegobuilderCommand.Feedback()
+            feedback_msg.completion_percent = completion_percent
+            goal_handle.publish_feedback(feedback_msg)
+
+            # Move complete exit condition
+            if curr_dist < self.motion_tolerance_thresh_m:
+                result.result = "Motion complete"
+                break
+
+            T.sleep(0.1)
+        goal_handle.succeed()
+        return result
 
 def main(args=None):
     rclpy.init(args=args)

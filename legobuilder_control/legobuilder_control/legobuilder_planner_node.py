@@ -5,6 +5,7 @@ from rclpy.action import ActionClient
 from rclpy.task import Future
 from rclpy.node import Node
 
+import numpy as np
 import tf2_ros
 
 from sensor_msgs.msg import JointState
@@ -80,16 +81,21 @@ class LegoBuilderPlannerNode(Node):
         while not self.lb_control_goal_terminated:
             rclpy.spin_once(self)
 
-    def freedrive(self):
+    def enable_freedrive(self):
         self.get_logger().info(f'Enabling freedrive')
         goal = LegobuilderCommand.Goal()
-        goal.cmd = "freedrive"
+        goal.cmd = "enable_freedrive"
         self.lb_control_send_goal(goal)
         while not self.lb_control_goal_terminated:
             rclpy.spin_once(self)
 
-    # def enable_freedrive(self)
-    # def disable_freedrive(self)
+    def disable_freedrive(self):
+        self.get_logger().info(f'Disabling freedrive')
+        goal = LegobuilderCommand.Goal()
+        goal.cmd = "disable_freedrive"
+        self.lb_control_send_goal(goal)
+        while not self.lb_control_goal_terminated:
+            rclpy.spin_once(self)
 
     def goto_joints_deg(self, joint_positions_deg : list[float], wrench_thresh=None, time=None):
         self.get_logger().info(f"Goto {[f'{val:0.2f}' for val in joint_positions_deg]}")
@@ -133,24 +139,50 @@ class LegoBuilderPlannerNode(Node):
         while not self.lb_control_goal_terminated:
             rclpy.spin_once(self)
 
-    def rotate_TCP(self, axis, angle):
-        self.get_logger().info(f'Rotate {axis}, {angle}')
+    def rotate_TCP_deg(self, axis : list[float], angle_deg : float, wrench_thresh=None, time=None):
+        self.get_logger().info(f'Rotate {axis}, {angle_deg}')
         goal = LegobuilderCommand.Goal()
-        goal.cmd = "rotate"
+        goal.cmd = "rotate_TCP"
         goal.axis = axis
-        goal.angle = angle
+        goal.angle = angle_deg * (np.pi/180)
+        
+        if wrench_thresh is not None:
+            goal.use_ft = True
+            goal.wrench_thresh = wrench_thresh
+        if time is not None:
+            goal.time = time
+            goal.use_time = True
+
         self.lb_control_send_goal(goal)
 
-    # def move_TCP(self, displacement)
+        while not self.lb_control_goal_terminated:
+            rclpy.spin_once(self)
 
+    def move_TCP(self, displacement : list[float], wrench_thresh=None, time=None):
+        # in meters
+        self.get_logger().info(f'Move {displacement}')
+        goal = LegobuilderCommand.Goal()
+        goal.cmd = "move_TCP"
+        goal.displacement = displacement
 
+        if wrench_thresh is not None:
+            goal.use_ft = True
+            goal.wrench_thresh = wrench_thresh
+        if time is not None:
+            goal.time = time
+            goal.use_time = True
+
+        self.lb_control_send_goal(goal)
+
+        while not self.lb_control_goal_terminated:
+            rclpy.spin_once(self)
 
 
 def demo1(args=None):
     BRICK_HEIGHT = 0.0096
     registration_pose_preset = [0.15, -0.50, 0.04, \
                                 -2.9, 1.2, -0.0]
-    num_trials = 10
+    num_trials = 5
     # directory_path = 'path/to/datastore'
     rclpy.init(args=args)
 
@@ -164,20 +196,21 @@ def demo1(args=None):
 
     # Freedrive to registration pose
     # TODO - Improve freedrive
-    # lb_planner_node.enable(freedrive)
+    lb_planner_node.enable_freedrive()
+    print("Freedrive enabled, move end effector to registration brick")
     lb_planner_node.goto_TCP(
         registration_pose_preset,
         wrench_thresh=None,
         time=10.0
     )
-    print("Freedrive enabled, move end effector to registration brick")
     _ = input("Press 'Enter' to continue")
-    # lb_planner_node.disable(freedrive)
+    lb_planner_node.disable_freedrive()
+    T.sleep(1)
 
     # Record registration pose
     registration_pose = lb_planner_node.get_ee_pose()
     block_pose = registration_pose
-    # goto: move to raised position
+    # Move to raised position
     waypoint_1 = [block_pose[0], block_pose[1], block_pose[2] + 5*BRICK_HEIGHT,
                   block_pose[3], block_pose[4], block_pose[5]]
     lb_planner_node.goto_TCP(waypoint_1)
@@ -185,20 +218,28 @@ def demo1(args=None):
     
     # for trial in num_trials:
     for trial in range(num_trials):
-        # perception srv: get lego bboxes
+        print(F"### Beginning trial {trial} ###")
+        # get lego bboxes
         # planning...
-        # goto: move for pick
+        
+        # Move to pick location
         lb_planner_node.goto_TCP(block_pose)
         T.sleep(1)
         # brickpick srv: set moment plate
         # basic: set_tcp
-        # tcp twist: break for pick
-        lb_planner_node.rotate_TCP(
-            axis=[0, 1, 0],
-            angle=30
+        # Rotate TCP to break
+        lb_planner_node.rotate_TCP_deg(
+            axis=[1.0, 0.0, 0.0],
+            angle_deg=-30.0,
+            time=5.0
         )
-        T.sleep(1)
-        # goto: withdraw for pick
+        # Raise TCP to pick
+        lb_planner_node.move_TCP(
+            displacement=[0.0, 0.0, 0.0200],
+            time=5.0
+        )
+        lb_planner_node.goto_TCP(waypoint_1, time=2.0)
+        T.sleep(5)
         # brickpick srv: withdraw for pick
 
         # perception srv: get lego bboxes
@@ -215,8 +256,7 @@ def demo1(args=None):
     # basic: home_ee
 
 
-    future = lb_planner_node.send_basic_goal('home')
-    rclpy.spin_until_future_complete(lb_planner_node, future)
+    lb_planner_node.home()
 
 
 

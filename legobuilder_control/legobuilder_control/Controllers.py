@@ -3,7 +3,7 @@
 import math
 import rclpy
 import rclpy.time
-from rclpy.node import Client
+from rclpy.node import Client, Publisher
 
 from legobuilder_interfaces.srv import BrickpickCommand
 
@@ -115,7 +115,7 @@ class URController:
     def __init__(self, ur_driver_pub):
         self.current_arm_position = [0.0, 0.0, 0.0]
 
-        self.ur_driver_pub = ur_driver_pub
+        self.ur_driver_pub = ur_driver_pub # type: Publisher
         T.sleep(1)
 
 
@@ -142,6 +142,26 @@ class URController:
         self.ur_driver_pub.publish(freedrive_mode_string)
 
         T.sleep(time)
+
+        return True
+    
+    def enable_freedrive(self, axes=[1,1,1,1,1,1]):
+        freedrive_mode_string = String()
+
+        freedrive_mode_string.data = 'freedrive_mode(freeAxes=[' + ','.join(str(axis) for axis in axes) + '], feature="tool")'
+
+        self.ur_driver_pub.publish(freedrive_mode_string)
+        self.ur_driver_pub.publish(freedrive_mode_string)
+
+        return True
+
+    def disable_freedrive(self):
+        freedrive_mode_string = String()
+
+        freedrive_mode_string.data = 'end_freedrive_mode()'
+
+        self.ur_driver_pub.publish(freedrive_mode_string)
+        self.ur_driver_pub.publish(freedrive_mode_string)
 
         return True
 
