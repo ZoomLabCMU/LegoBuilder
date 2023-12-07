@@ -2,7 +2,7 @@
 # Basic
 string cmd
 float64 time
-geometry_msgs/Wrench wrench_thresh
+float64[] wrench_thresh
 
 # Goto
 float64[] ee_pose

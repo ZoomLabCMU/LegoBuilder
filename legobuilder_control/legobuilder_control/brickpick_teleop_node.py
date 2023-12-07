@@ -21,7 +21,6 @@ from rclpy.node import Node
 from legobuilder_interfaces.srv import BrickpickCommand
 from legobuilder_control.Controllers import BrickPickController
 
-import threading
 import sys
 
 if sys.platform == 'win32':
@@ -36,9 +35,9 @@ This node takes keypresses from the keyboard and publishes them as BrickpickComm
 -------------------------
 Velocity Control:
 Stop: 'Space'
-Long plate:  /\ Up 
+Long plate:  /\\ Up 
              ||
-             \/ Down
+             \\/ Down
 
             Up  Down
 Short plate: <===>
@@ -131,6 +130,7 @@ def main(args=None):
             if key in bindings.keys():
                 status = bindings[key]()
             elif key == 'h':
+                status = "Help message posted"
                 print(help_msg)
             else:
                 status = bp_controller.stop()

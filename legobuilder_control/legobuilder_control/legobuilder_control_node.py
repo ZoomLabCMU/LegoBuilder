@@ -4,29 +4,21 @@ import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 import rclpy.time
+from rclpy.action import ActionServer, GoalResponse, CancelResponse
 
-import tf2_ros
-import numpy as np
-from cv_bridge import CvBridge
 from std_msgs.msg import String
-from sensor_msgs.msg import Image
-from geometry_msgs.msg import WrenchStamped, Wrench, Twist
+from geometry_msgs.msg import WrenchStamped
 from sensor_msgs.msg import JointState
 
-# from legobuilder_interfaces.msg import 
 from legobuilder_interfaces.srv import BrickpickCommand
 from legobuilder_interfaces.action import LegobuilderCommand
 
-from rclpy.action import ActionServer, GoalResponse, CancelResponse
-from rclpy.callback_groups import ReentrantCallbackGroup
-
-import os
+import tf2_ros
+import numpy as np
 import time as T
-import threading
-import signal
-import sys
-import argparse
-from legobuilder_control.Controllers import URController, BrickPickController, utils
+
+from legobuilder_control.Controllers import URController, BrickPickController
+from legobuilder_control import utils
 
 
 clicks = []
@@ -104,15 +96,13 @@ class LegoBuilderControlNode(Node):
     
     def recv_ur_wrench(self, wrench : WrenchStamped):
         self.ee_wrench = wrench
-        return True
     
     def recv_ur_joint_states(self, joint_states : JointState):
         self.joint_states = joint_states
-        return True
     
     def get_ee_pose(self):
         trans = self.tf_buffer.lookup_transform('base', 'tool0', rclpy.time.Time())
-        axis_angle = -utils.quat_to_axis_angle([trans.transform.rotation.x, trans.transform.rotation.y,
+        axis_angle = utils.quat_to_axis_angle([trans.transform.rotation.x, trans.transform.rotation.y,
                                                 trans.transform.rotation.z, trans.transform.rotation.w])
 
         return [trans.transform.translation.x, trans.transform.translation.y, trans.transform.translation.z,
@@ -122,7 +112,7 @@ class LegoBuilderControlNode(Node):
         joint_states = self.joint_states
         D = dict()
         for i in range(len(joint_states.name)):
-            D[joint_states.name[i]] = joint_states.position[i]
+            D[joint_states.name[i]] = joint_states.position[i] # type: ignore
         joint_positions = [
             D['shoulder_pan_joint'], D['shoulder_lift_joint'], D['elbow_joint'],\
             D['wrist_1_joint'], D['wrist_2_joint'], D['wrist_3_joint']
@@ -215,6 +205,7 @@ class LegoBuilderControlNode(Node):
             timeout = 1.5 * time
             self.ur_controller.move_joints_in_degrees(goal_joint_positions_deg, time=time)
         else:
+            timeout = 30.0
             self.ur_controller.move_joints_in_degrees(goal_joint_positions_deg)
         
         start_state = np.asarray(self.get_joint_positions())
@@ -226,10 +217,25 @@ class LegoBuilderControlNode(Node):
         # Loop and spin node for feedback
         while (rclpy.ok()):
             # Force-Torque exit condition
-            if use_ft and (abs(self.ee_wrench) > wrench_thresh):
-                self.ur_controller.stop()
-                result.result = "Force-Torque limit exceeded"
-                break
+            if use_ft : # and self.ee_wrench > wrench_thresh
+                ee_wrench =[
+                    self.ee_wrench.wrench.force.x, 
+                    self.ee_wrench.wrench.force.y,
+                    self.ee_wrench.wrench.force.z,
+                    self.ee_wrench.wrench.torque.x,
+                    self.ee_wrench.wrench.torque.y,
+                    self.ee_wrench.wrench.torque.z,
+                ]
+                overloaded_axis = -1
+                for i in range(len(ee_wrench)):
+                    if ee_wrench[i] > wrench_thresh[i]:
+                        overloaded_axis = i
+                        break
+                if overloaded_axis >= 0:
+                    self.ur_controller.stop()
+                    idx2ax = {0: "Fx", 1: "Fy", 2: "Fz", 3: "Rx", 4: "Ry", 5: "Rz"}
+                    result.result = f"Force-Torque limit exceeded: {idx2ax[overloaded_axis]} @ {ee_wrench[overloaded_axis]:0.2f}"
+                    break
             # Timeout exit condition
             if use_time and ((T.time() - t_start) > timeout):
                 self.ur_controller.stop()
@@ -268,6 +274,7 @@ class LegoBuilderControlNode(Node):
             timeout = 1.5 * time
             self.ur_controller.move_ee(goal_ee_pose, time=time)
         else:
+            timeout = 30.0
             self.ur_controller.move_ee(goal_ee_pose)
         
         start_state = np.asarray(self.get_ee_pose())
@@ -279,7 +286,7 @@ class LegoBuilderControlNode(Node):
         # Loop and spin node for feedback
         while (rclpy.ok()):
             # Force-Torque exit condition
-            if use_ft and (abs(self.ee_wrench) > wrench_thresh):
+            if use_ft : # and self.ee_wrench > wrench_thresh
                 self.ur_controller.stop()
                 result.result = "Force-Torque limit exceeded"
                 break
@@ -330,6 +337,7 @@ class LegoBuilderControlNode(Node):
             timeout = 1.5 * time
             self.ur_controller.move_ee(goal_ee_pose, time=time)
         else:
+            timeout = 30.0
             self.ur_controller.move_ee(goal_ee_pose)
         
         start_state = np.asarray(self.get_ee_pose())
@@ -341,7 +349,7 @@ class LegoBuilderControlNode(Node):
         # Loop and spin node for feedback
         while (rclpy.ok()):
             # Force-Torque exit condition
-            if use_ft and (abs(self.ee_wrench) > wrench_thresh):
+            if use_ft : # and self.ee_wrench > wrench_thresh
                 self.ur_controller.stop()
                 result.result = "Force-Torque limit exceeded"
                 break
@@ -354,7 +362,6 @@ class LegoBuilderControlNode(Node):
             curr_state = np.asarray(self.get_ee_pose())
             curr_dist = np.sqrt(np.sum((curr_state[3:6] - end_state[3:6])**2))
 
-            self.get_logger().info(f"\n{start_state[3:6]}\n{curr_state[3:6]}\n{end_state[3:6]}\n{curr_dist}\n{start_dist}")
             completion_percent = 100.0 * (start_dist - curr_dist) / start_dist
             # Move complete exit condition
             if curr_dist < self.motion_tolerance_thresh_rad:
@@ -396,6 +403,7 @@ class LegoBuilderControlNode(Node):
             timeout = 1.5 * time
             self.ur_controller.move_ee(goal_ee_pose, time=time)
         else:
+            timeout = 30.0
             self.ur_controller.move_ee(goal_ee_pose)
     
         result = LegobuilderCommand.Result()
@@ -403,7 +411,7 @@ class LegoBuilderControlNode(Node):
         # Loop and spin node for feedback
         while (rclpy.ok()):
             # Force-Torque exit condition
-            if use_ft and (abs(self.ee_wrench) > wrench_thresh):
+            if use_ft : # and self.ee_wrench > wrench_thresh
                 self.ur_controller.stop()
                 result.result = "Force-Torque limit exceeded"
                 break
@@ -431,6 +439,7 @@ class LegoBuilderControlNode(Node):
         return result
 
 def main(args=None):
+
     rclpy.init(args=args)
 
     lb_control_node = LegoBuilderControlNode()
@@ -441,7 +450,6 @@ def main(args=None):
 
     lb_control_node.destroy_node()
     rclpy.shutdown()
-
 
 
 if __name__ == '__main__':

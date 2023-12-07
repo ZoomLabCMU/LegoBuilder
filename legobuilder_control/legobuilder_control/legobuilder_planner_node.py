@@ -2,14 +2,12 @@ import rclpy
 import rclpy.time
 import time as T
 from rclpy.action import ActionClient
-from rclpy.task import Future
 from rclpy.node import Node
 
 import numpy as np
 import tf2_ros
 
-from sensor_msgs.msg import JointState
-from geometry_msgs.msg import Wrench, Twist
+from geometry_msgs.msg import Wrench
 from legobuilder_interfaces.action import LegobuilderCommand
 
 from legobuilder_control import utils
@@ -17,11 +15,8 @@ from legobuilder_control import utils
 class LegoBuilderPlannerNode(Node):
 
     def __init__(self):
-        super().__init__('legobuilder_planner_node')
+        super().__init__("legobuilder_planner_node") # type: ignore
         self.lb_control_cli = ActionClient(self, LegobuilderCommand, 'legobuilder_command')
-        self.lb_control_send_goal_future = None # type: Future
-        self.lb_control_get_result_future = None # type: Future
-
 
         # Transform buffer subscriber
         self.tf_buffer = tf2_ros.Buffer()
@@ -33,7 +28,7 @@ class LegoBuilderPlannerNode(Node):
     def get_ee_pose(self):
         trans = self.tf_buffer.lookup_transform('base', 'tool0', rclpy.time.Time())
 
-        axis_angle = -utils.quat_to_axis_angle([trans.transform.rotation.x, trans.transform.rotation.y,
+        axis_angle = utils.quat_to_axis_angle([trans.transform.rotation.x, trans.transform.rotation.y,
                                                 trans.transform.rotation.z, trans.transform.rotation.w])
 
         return [trans.transform.translation.x, trans.transform.translation.y, trans.transform.translation.z,
@@ -102,7 +97,7 @@ class LegoBuilderPlannerNode(Node):
         goal = LegobuilderCommand.Goal()
         goal.cmd = 'goto_joints_deg'
         goal.joint_positions = joint_positions_deg
-        goal.wrench_thresh = Wrench()
+        goal.wrench_thresh = []
         goal.use_ft = False
         goal.time = 0.0
         goal.use_time = False
@@ -123,7 +118,7 @@ class LegoBuilderPlannerNode(Node):
         goal = LegobuilderCommand.Goal()
         goal.cmd = 'goto_TCP'
         goal.ee_pose = ee_pose
-        goal.wrench_thresh = Wrench()
+        goal.wrench_thresh = []
         goal.use_ft = False
         goal.time = 0.0
         goal.use_time = False
@@ -146,7 +141,7 @@ class LegoBuilderPlannerNode(Node):
         goal.cmd = "rotate_TCP"
         goal.axis = axis
         goal.angle = angle_deg * (np.pi/180)
-        goal.wrench_thresh = Wrench()
+        goal.wrench_thresh = []
         goal.use_ft = False
         goal.time = 0.0
         goal.use_time = False
@@ -169,7 +164,7 @@ class LegoBuilderPlannerNode(Node):
         goal = LegobuilderCommand.Goal()
         goal.cmd = "move_TCP"
         goal.displacement = displacement
-        goal.wrench_thresh = Wrench()
+        goal.wrench_thresh = []
         goal.use_ft = False
         goal.time = 0.0
         goal.use_time = False
@@ -221,26 +216,28 @@ def demo1(args=None):
 
     # Record registration pose
     registration_pose = lb_planner_node.get_ee_pose()
-    block_pose = registration_pose
+    block_pose = registration_pose[:] # clone
     # Move to raised position
     waypoint_1 = [block_pose[0], block_pose[1], block_pose[2] + 5*BRICK_HEIGHT,
                   block_pose[3], block_pose[4], block_pose[5]]
-    lb_planner_node.goto_TCP(waypoint_1)
-    T.sleep(1)
+    lb_planner_node.goto_TCP(waypoint_1, time=5.0)
     
     # for trial in num_trials:
     for trial in range(num_trials):
         print(F"### Beginning trial {trial} ###")
+        T.sleep(5)
         # get lego bboxes
         # planning...
         
         # Move to pick location
-        lb_planner_node.goto_TCP(block_pose)
+        waypoint_2 = block_pose[:]
+        waypoint_2[2] += BRICK_HEIGHT
+        lb_planner_node.goto_TCP(waypoint_2)
         T.sleep(1)
-
+        # Engage brick
         lb_planner_node.move_TCP(
-            displacement=[0.0, 0.0, 0.0200],
-            time=5.0
+            displacement=[0.0, 0.0, -BRICK_HEIGHT],
+            time=1.0
         )
         T.sleep(1)
         # brickpick srv: set moment plate
@@ -252,20 +249,13 @@ def demo1(args=None):
             time=5.0
         )
         T.sleep(1)
-        lb_planner_node.rotate_TCP_deg(
-            axis=[1.0, 0.0, 0.0],
-            angle_deg=30.0,
-            time=5.0
-        )
-        T.sleep(1)
         # Raise TCP to pick
         lb_planner_node.move_TCP(
-            displacement=[0.0, 0.0, 0.0200],
-            time=5.0
+            displacement=[0.0, 0.0, 5*BRICK_HEIGHT],
+            time=1.0
         )
         T.sleep(1)
         lb_planner_node.goto_TCP(waypoint_1, time=2.0)
-        T.sleep(5)
         # brickpick srv: withdraw for pick
 
         # perception srv: get lego bboxes
