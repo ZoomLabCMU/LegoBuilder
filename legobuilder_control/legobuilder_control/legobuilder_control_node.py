@@ -7,13 +7,15 @@ import rclpy.time
 from rclpy.action import ActionServer, GoalResponse, CancelResponse
 
 from std_msgs.msg import String
-from geometry_msgs.msg import WrenchStamped
+from geometry_msgs.msg import WrenchStamped, Pose
 from sensor_msgs.msg import JointState
 
 from legobuilder_interfaces.srv import BrickpickCommand
 from legobuilder_interfaces.action import LegobuilderCommand
 
 import tf2_ros
+import tf2_geometry_msgs
+
 import numpy as np
 import time as T
 
@@ -30,9 +32,13 @@ block_length = 0.0318
 class LegoBuilderControlNode(Node):
     def __init__(self):
         super().__init__('Legobuilder_control_node') # type: ignore
-        self.motion_completion_thresh = 99.5
         self.motion_tolerance_thresh_m = 0.0005 # m
-        self.motion_tolerance_thresh_rad = 0.001
+        self.motion_tolerance_thresh_rad = 0.001 # rad
+        
+        # The TCP offset from the tool0 (flange) pose
+        # This is due to the fact that altering the TCP using the teach pad or ur script interface does not change
+        # the tool0 transform and the tool0_controller frame does not exist with my current ur_robot_driver version (humble)
+        self.tcp_pose = Pose()
 
         # State Estimation
         self.joint_states = JointState()
@@ -101,12 +107,22 @@ class LegoBuilderControlNode(Node):
         self.joint_states = joint_states
     
     def get_ee_pose(self):
-        trans = self.tf_buffer.lookup_transform('base', 'tool0', rclpy.time.Time())
-        axis_angle = utils.quat_to_axis_angle([trans.transform.rotation.x, trans.transform.rotation.y,
-                                                trans.transform.rotation.z, trans.transform.rotation.w])
+        # TODO - Add support for angled TCP offests, but this is really not necessary for the time being
+        tool0_trans = self.tf_buffer.lookup_transform('base', 'tool0', rclpy.time.Time())
+        
+        axis_angle = utils.quat_to_axis_angle([tool0_trans.transform.rotation.x, tool0_trans.transform.rotation.y,
+                                                tool0_trans.transform.rotation.z, tool0_trans.transform.rotation.w])
+        
+        # tool0_pose = [tool0_trans.transform.translation.x, tool0_trans.transform.translation.y, tool0_trans.transform.translation.z,
+        #               axis_angle[0], axis_angle[1], axis_angle[2]]
+        
 
-        return [trans.transform.translation.x, trans.transform.translation.y, trans.transform.translation.z,
-                axis_angle[0], axis_angle[1], axis_angle[2]]
+        tcp_pose = tf2_geometry_msgs.do_transform_pose(self.tcp_pose, tool0_trans)
+        # axis_angle = utils.quat_to_axis_angle([tcp_pose.orientation.x, tcp_pose.orientation.y,
+        #                                         tcp_pose.orientation.z, tcp_pose.orientation.w])
+        tcp_pose = [tcp_pose.position.x, tcp_pose.position.y, tcp_pose.position.z,
+                      axis_angle[0], axis_angle[1], axis_angle[2]]
+        return tcp_pose
 
     def get_joint_positions(self):
         joint_states = self.joint_states
@@ -180,6 +196,26 @@ class LegoBuilderControlNode(Node):
             result.result = "Complete"
         elif cmd == "goto_joints_deg":
             result = self.goto_joints_deg_execution(goal_handle)
+        elif cmd == "set_TCP":
+            goal_msg = self.control_goal
+            tcp_pose = goal_msg.ee_pose
+
+            # Set the internal tcp PoseStamped
+            self.tcp_pose.position.x = tcp_pose[0]
+            self.tcp_pose.position.y = tcp_pose[1]
+            self.tcp_pose.position.z = tcp_pose[2]
+            quat = utils.axis_angle_to_quaternion([tcp_pose[3], tcp_pose[4], tcp_pose[5]])
+            self.tcp_pose.orientation.x = quat[0]
+            self.tcp_pose.orientation.y = quat[1]
+            self.tcp_pose.orientation.z = quat[2]
+            self.tcp_pose.orientation.w = quat[3]
+
+            # Set the TCP on the ur system
+            self.ur_controller.set_tcp(tcp_pose)
+            
+            goal_handle.succeed()
+            result = LegobuilderCommand.Result()
+            result.result = "Complete"
         elif cmd == "goto_TCP":
             result = self.goto_TCP_execution(goal_handle)
         elif cmd == "rotate_TCP":
@@ -361,7 +397,6 @@ class LegoBuilderControlNode(Node):
 
             curr_state = np.asarray(self.get_ee_pose())
             curr_dist = np.sqrt(np.sum((curr_state[3:6] - end_state[3:6])**2))
-
             completion_percent = 100.0 * (start_dist - curr_dist) / start_dist
             # Move complete exit condition
             if curr_dist < self.motion_tolerance_thresh_rad:

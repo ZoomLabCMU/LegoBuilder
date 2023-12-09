@@ -5,17 +5,24 @@ from rclpy.action import ActionClient
 from rclpy.node import Node
 
 import numpy as np
+import cv2
+import cv_bridge
 import tf2_ros
 
 from geometry_msgs.msg import Wrench
-from legobuilder_interfaces.action import LegobuilderCommand
+from sensor_msgs.msg import Image
 
+from legobuilder_interfaces.action import LegobuilderCommand
 from legobuilder_control import utils
 
 class LegoBuilderPlannerNode(Node):
 
     def __init__(self):
         super().__init__("legobuilder_planner_node") # type: ignore
+        self.bridge = cv_bridge.CvBridge()
+        self.ws_img = Image()
+        self.ee_img = Image()
+
         self.lb_control_cli = ActionClient(self, LegobuilderCommand, 'legobuilder_command')
 
         # Transform buffer subscriber
@@ -24,6 +31,26 @@ class LegoBuilderPlannerNode(Node):
             self.tf_buffer,
             self
         )
+
+        self.workspace_img_sub = self.create_subscription(
+            Image,
+            'workspace_img',
+            self.recv_ws_img_cb,
+            10
+        )
+
+        self.ee_img_sub = self.create_subscription(
+            Image,
+            '/camera/color/image_rect_raw',
+            self.recv_ee_img_cb,
+            10  # QoS profile, adjust as needed
+        )
+
+    def recv_ws_img_cb(self, img : Image):
+        self.ws_img = img
+
+    def recv_ee_img_cb(self, img : Image):
+        self.ee_img = img
 
     def get_ee_pose(self):
         trans = self.tf_buffer.lookup_transform('base', 'tool0', rclpy.time.Time())
@@ -64,7 +91,7 @@ class LegoBuilderPlannerNode(Node):
         self.get_logger().info(f'Result: {result.result}')
 
     def lb_control_feedback_cb(self, feedback_msg : LegobuilderCommand.Feedback):
-        feedback = feedback_msg.feedback
+        feedback = feedback_msg.feedback # type: ignore
         self.get_logger().info(f'Completion percent: {feedback.completion_percent:0.2f}%')
 
     ### High level commands ###
@@ -72,6 +99,15 @@ class LegoBuilderPlannerNode(Node):
         self.get_logger().info(f'Homing robot')
         goal = LegobuilderCommand.Goal()
         goal.cmd = "home"
+        self.lb_control_send_goal(goal)
+        while not self.lb_control_goal_terminated:
+            rclpy.spin_once(self)
+
+    def set_TCP(self, tcp_pose : list[float]):
+        self.get_logger().info(f"Setting UR TCP to {[f'{val:0.2f}' for val in tcp_pose]}")
+        goal = LegobuilderCommand.Goal()
+        goal.cmd = "set_TCP"
+        goal.ee_pose = tcp_pose
         self.lb_control_send_goal(goal)
         while not self.lb_control_goal_terminated:
             rclpy.spin_once(self)
@@ -181,35 +217,52 @@ class LegoBuilderPlannerNode(Node):
         while not self.lb_control_goal_terminated:
             rclpy.spin_once(self)
 
+    def display_ws_img(self, time_ms=5000, title='Workspace'):
+        cv_image = self.bridge.imgmsg_to_cv2(self.ws_img, desired_encoding='bgr8')
+        # Display the image
+        cv2.imshow(title, cv_image)
+        cv2.waitKey(time_ms)
+        cv2.destroyAllWindows()
+
+    def display_ee_img(self, time_ms=5000, title='End Effector'):
+        cv_image = self.bridge.imgmsg_to_cv2(self.ee_img, desired_encoding='bgr8')
+        # Display the image
+        cv2.imshow(title, cv_image)
+        cv2.waitKey(time_ms)
+        cv2.destroyAllWindows()
 
 def demo1(args=None):
-    BRICK_HEIGHT = 0.0096
-    registration_pose_preset = [0.15, -0.50, 0.04, \
-                                -2.9, 1.2, -0.0]
-    # registration_pose_preset[3] = -3.33435357
-    # registration_pose_preset[4] = 1.38035729
-    # registration_pose_preset[5] = -0.36986562
+    # Constants
+    STUD_HEIGHT = 0.0096 # m
+    STUD_WIDTH = 0.008 # m
+    TCP_BASE = np.asarray([-2 * STUD_WIDTH, 1 * STUD_WIDTH, 0.140, 0, 0, 0])
+    REGISTRATION_POSE_PRESET = [0.15, -0.50, 0.04, -2.9, 1.2, -0.0]
+
+    # args
     num_trials = 5
     # directory_path = 'path/to/datastore'
-    rclpy.init(args=args)
 
+    # ROS
+    rclpy.init(args=args)
     lb_planner_node = LegoBuilderPlannerNode()
 
     # Set TCP
-    # TODO - implement set_TCP
+    TCP_offset = np.asarray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    tcp_pose = (TCP_BASE + TCP_offset).tolist()
+    lb_planner_node.set_TCP(tcp_pose)
 
     # Home system
     lb_planner_node.home()
 
     # Freedrive to registration pose
-    # TODO - Improve freedrive
     lb_planner_node.enable_freedrive()
     print("Freedrive enabled, move end effector to registration brick")
     lb_planner_node.goto_TCP(
-        registration_pose_preset,
+        REGISTRATION_POSE_PRESET,
         wrench_thresh=None,
         time=10.0
     )
+    lb_planner_node.display_ws_img()
     _ = input("Press 'Enter' to continue")
     lb_planner_node.disable_freedrive()
     T.sleep(1)
@@ -217,26 +270,36 @@ def demo1(args=None):
     # Record registration pose
     registration_pose = lb_planner_node.get_ee_pose()
     block_pose = registration_pose[:] # clone
-    # Move to raised position
-    waypoint_1 = [block_pose[0], block_pose[1], block_pose[2] + 5*BRICK_HEIGHT,
+
+    # Move to safe pose
+    waypoint_1 = [block_pose[0], block_pose[1], block_pose[2] + 10*STUD_HEIGHT,
                   block_pose[3], block_pose[4], block_pose[5]]
     lb_planner_node.goto_TCP(waypoint_1, time=5.0)
     
-    # for trial in num_trials:
+    # Execute the skills in each trial
     for trial in range(num_trials):
         print(F"### Beginning trial {trial} ###")
         T.sleep(5)
-        # get lego bboxes
+
+        # Anylize workspace
+        # detections = lb_planner_node.get_ws_detections()
+        lb_planner_node.display_ws_img()
         # planning...
         
         # Move to pick location
         waypoint_2 = block_pose[:]
-        waypoint_2[2] += BRICK_HEIGHT
-        lb_planner_node.goto_TCP(waypoint_2)
+        waypoint_2[2] += STUD_HEIGHT
+        lb_planner_node.goto_TCP(waypoint_2, time=2.0)
         T.sleep(1)
+
+        # Anlyize EE view
+        # target_localized = lb_planner_node.get_ee_target()...
+        lb_planner_node.display_ee_img()
+        # re-planning...
+
         # Engage brick
         lb_planner_node.move_TCP(
-            displacement=[0.0, 0.0, -BRICK_HEIGHT],
+            displacement=[0.0, 0.0, -STUD_HEIGHT],
             time=1.0
         )
         T.sleep(1)
@@ -251,11 +314,12 @@ def demo1(args=None):
         T.sleep(1)
         # Raise TCP to pick
         lb_planner_node.move_TCP(
-            displacement=[0.0, 0.0, 5*BRICK_HEIGHT],
+            displacement=[0.0, 0.0, 5*STUD_HEIGHT],
             time=1.0
         )
         T.sleep(1)
         lb_planner_node.goto_TCP(waypoint_1, time=2.0)
+        lb_planner_node.display_ws_img()
         # brickpick srv: withdraw for pick
 
         # perception srv: get lego bboxes

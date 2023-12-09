@@ -44,6 +44,7 @@ def generate_launch_description():
         launch_arguments={'ur_type': 'ur5e',
                           'robot_ip': '192.168.56.101',
                           'launch_rviz': LaunchConfiguration('sim')}.items()
+                          
     )
 
     ### Sensors ###
