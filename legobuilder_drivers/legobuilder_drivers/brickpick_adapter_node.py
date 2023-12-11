@@ -14,16 +14,16 @@ from legobuilder_interfaces.srv import BrickpickCommand
 from legobuilder_drivers.brickpick_adapter import BrickPickAdapter
 
 ip_address = "172.26.185.38"
-ip_address = "192.168.2.101"
+ip_address = "192.168.2.109"
 
 class BrickPickAdapterNode(Node):
     def __init__(self):
         super().__init__("brickpick_adapter_node") #type: ignore
 
-        # Command subscriber
-        self.cmd_subscriber = self.create_service(
+        # Command server
+        self.cmd_server = self.create_service(
             BrickpickCommand,
-            'brickpick_cmd',
+            '/brickpick_command',
             self.recv_cmd_req_callback
         )
         self.brickpick_adapter = BrickPickAdapter(ip_address)

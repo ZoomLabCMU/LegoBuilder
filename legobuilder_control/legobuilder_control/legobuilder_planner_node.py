@@ -8,12 +8,22 @@ import numpy as np
 import cv2
 import cv_bridge
 import tf2_ros
+import threading
 
 from geometry_msgs.msg import Wrench
 from sensor_msgs.msg import Image
 
 from legobuilder_interfaces.action import LegobuilderCommand
+from legobuilder_interfaces.srv import BrickpickCommand
+
 from legobuilder_control import utils
+from legobuilder_control.Controllers import BrickPickController
+
+# Constants
+STUD_HEIGHT = 0.0096 # m
+STUD_WIDTH = 0.008 # m
+TCP_BASE = np.asarray([-2 * STUD_WIDTH, 1 * STUD_WIDTH, 0.140, 0, 0, 0])
+REGISTRATION_POSE_PRESET = [0.15, -0.50, 0.04, -2.9, 1.2, -0.0]
 
 class LegoBuilderPlannerNode(Node):
 
@@ -25,6 +35,12 @@ class LegoBuilderPlannerNode(Node):
 
         self.lb_control_cli = ActionClient(self, LegobuilderCommand, 'legobuilder_command')
 
+        self.bp_control_cli = self.create_client(
+            BrickpickCommand,
+            '/brickpick_command'
+        )
+        self.bp_controller = BrickPickController(self.bp_control_cli)
+
         # Transform buffer subscriber
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_buffer_sub = tf2_ros.TransformListener(
@@ -34,7 +50,7 @@ class LegoBuilderPlannerNode(Node):
 
         self.workspace_img_sub = self.create_subscription(
             Image,
-            'workspace_img',
+            '/workspace_img',
             self.recv_ws_img_cb,
             10
         )
@@ -217,6 +233,53 @@ class LegoBuilderPlannerNode(Node):
         while not self.lb_control_goal_terminated:
             rclpy.spin_once(self)
 
+    ### Composite Commands ###
+    # approach() : approach a target pose along a given normal vector
+    #   Call this from somewhere near/reasonable to generate a trajectory and it should:
+    #   1. rapid to a point {approach buffer} along the normal away from the approached surface
+    #   2. slowly engage the studs of the approached surface
+    #       2.a FT limiting?
+    #       2.b servoing motion?
+    #       2.c Remote Center of Compliance?
+    #   3. stop and release majority of pressure
+
+    def pick(self, brick : int, direction='long'):
+        # Break through rotation about a specified brick and axis
+        # Right now this assumes a vertical build plate and stud orientation
+        BRICK_MAX = 5
+        ROTATION_ANGLE_DEG = 30.0
+        RELEASE_VEC = [0.0, 0.0, STUD_HEIGHT]
+
+        brick = min(max(brick, 1), BRICK_MAX)
+
+        # Set the TCP to the brick corner
+        TCP_offset = np.asarray([0.0, 0.0, brick * STUD_HEIGHT, 0.0, 0.0, 0.0])
+        tcp_pose = (TCP_BASE + TCP_offset).tolist()
+        self.set_TCP(tcp_pose)
+
+        # Deploy the BrickPick moment plate
+        if direction == 'long':
+            result_future = self.bp_controller.long_goto_brick(brick)
+            rclpy.spin_until_future_complete(self, result_future)
+        elif direction == 'short':
+            result_future = self.bp_controller.short_goto_brick(brick)
+            rclpy.spin_until_future_complete(self, result_future)
+        else:
+            raise NotImplementedError
+        
+        # Rotate about the axis direction 
+        if direction == 'long':
+            axis = [-1.0, 0.0, 0.0]
+        elif direction == 'short':
+            axis = [0.0, -1.0, 0.0]
+        else:
+            raise NotImplementedError
+        self.rotate_TCP_deg(axis, ROTATION_ANGLE_DEG)
+
+        # Pull up to complete pick
+        self.move_TCP(RELEASE_VEC)
+
+    ### Perception ###
     def display_ws_img(self, time_ms=5000, title='Workspace'):
         cv_image = self.bridge.imgmsg_to_cv2(self.ws_img, desired_encoding='bgr8')
         # Display the image
@@ -232,12 +295,6 @@ class LegoBuilderPlannerNode(Node):
         cv2.destroyAllWindows()
 
 def demo1(args=None):
-    # Constants
-    STUD_HEIGHT = 0.0096 # m
-    STUD_WIDTH = 0.008 # m
-    TCP_BASE = np.asarray([-2 * STUD_WIDTH, 1 * STUD_WIDTH, 0.140, 0, 0, 0])
-    REGISTRATION_POSE_PRESET = [0.15, -0.50, 0.04, -2.9, 1.2, -0.0]
-
     # args
     num_trials = 5
     # directory_path = 'path/to/datastore'
@@ -278,6 +335,10 @@ def demo1(args=None):
     
     # Execute the skills in each trial
     for trial in range(num_trials):
+        brick = trial + 1
+        # direction = 'long' if trial % 2 == 0 else 'short'
+        direction = 'long'
+
         print(F"### Beginning trial {trial} ###")
         T.sleep(5)
 
@@ -303,23 +364,9 @@ def demo1(args=None):
             time=1.0
         )
         T.sleep(1)
-        # brickpick srv: set moment plate
-        # basic: set_tcp
-        # Rotate TCP to break
-        lb_planner_node.rotate_TCP_deg(
-            axis=[1.0, 0.0, 0.0],
-            angle_deg=-30.0,
-            time=5.0
-        )
-        T.sleep(1)
-        # Raise TCP to pick
-        lb_planner_node.move_TCP(
-            displacement=[0.0, 0.0, 5*STUD_HEIGHT],
-            time=1.0
-        )
+        lb_planner_node.pick(brick, direction=direction)
         T.sleep(1)
         lb_planner_node.goto_TCP(waypoint_1, time=2.0)
-        lb_planner_node.display_ws_img()
         # brickpick srv: withdraw for pick
 
         # perception srv: get lego bboxes

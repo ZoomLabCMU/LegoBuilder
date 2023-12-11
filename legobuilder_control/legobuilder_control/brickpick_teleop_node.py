@@ -22,6 +22,7 @@ from legobuilder_interfaces.srv import BrickpickCommand
 from legobuilder_control.Controllers import BrickPickController
 
 import sys
+import threading
 
 if sys.platform == 'win32':
     import msvcrt
@@ -58,7 +59,7 @@ class BrickPickTeleopNode(Node):
 
         self.brickpick_cli = self.create_client(
             BrickpickCommand, 
-            "brickpick_cmd"
+            "/brickpick_command"
         )
         while not self.brickpick_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('service not available, waiting again...')
@@ -123,6 +124,9 @@ def main(args=None):
         'p': lambda: bp_controller.plunger_down(),               # Plunger down
     }
     
+    spinner = threading.Thread(target=rclpy.spin, args=(brickpick_teleop_node,))
+    spinner.start()
+
     try:
         print(help_msg)
         while True:

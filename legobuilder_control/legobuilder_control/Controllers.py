@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from asyncio import Future
+import rclpy
 import math
 from rclpy.node import Client, Publisher
 
@@ -17,7 +19,6 @@ class BrickPickController:
         self.u_max_short = 65535
         self.u_max_plunger = 1023
 
-    # Non-Blocking services
     def set_long_ctrl(self, u : float) -> str:
         u = min(max(u, -1.0), 1.0)
         u = math.floor(u * self.u_max_long)
@@ -82,19 +83,19 @@ class BrickPickController:
         response = self.brickpick_adapter_cli.call(command_request)  # type: BrickpickCommand.Response
         return response.status
     
-    def long_goto_brick(self, brick : int) -> str:
+    def long_goto_brick(self, brick : int):
         command_request = BrickpickCommand.Request()
         command_request.command = '/goto_long_brick'
         command_request.target_brick = brick
-        response = self.brickpick_adapter_cli.call(command_request) # type: BrickpickCommand.Response
-        return response.status
+        response_future = self.brickpick_adapter_cli.call_async(command_request) # type: ignore
+        return response_future
     
-    def short_goto_brick(self, brick : int) -> str:
+    def short_goto_brick(self, brick : int):
         command_request = BrickpickCommand.Request()
         command_request.command = '/goto_short_brick'
         command_request.target_brick = brick
-        response = self.brickpick_adapter_cli.call(command_request) # type: BrickpickCommand.Response
-        return response.status
+        response_future = self.brickpick_adapter_cli.call(command_request) # type: ignore
+        return response_future
     
     def reset(self) -> str:
         # TODO - Add a reset command to brickpick embedded

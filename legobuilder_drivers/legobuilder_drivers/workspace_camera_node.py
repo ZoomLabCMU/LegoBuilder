@@ -30,7 +30,7 @@ class WorkspaceCameraNode(Node):
         # Image Publisher
         self.img_publisher = self.create_publisher(
             Image,
-            'workspace_img',
+            '/workspace_img',
             10
         )
         self.bridge = CvBridge()
