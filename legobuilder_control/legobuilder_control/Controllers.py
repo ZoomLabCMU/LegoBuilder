@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-from asyncio import Future
-import rclpy
 import math
 from rclpy.node import Client, Publisher
 
@@ -19,25 +17,25 @@ class BrickPickController:
         self.u_max_short = 65535
         self.u_max_plunger = 1023
 
-    def set_long_ctrl(self, u : float) -> str:
+    def set_long_ctrl(self, u : float):
         u = min(max(u, -1.0), 1.0)
         u = math.floor(u * self.u_max_long)
         command_request = BrickpickCommand.Request()
         command_request.command = '/set_long_ctrl'
         command_request.u = u
-        response = self.brickpick_adapter_cli.call(command_request)  # type: BrickpickCommand.Response
-        return response.status
+        response_future = self.brickpick_adapter_cli.call_async(command_request)  # type: ignore
+        return response_future
 
-    def set_short_ctrl(self, u : float) -> str:
+    def set_short_ctrl(self, u : float):
         u = min(max(u, -1.0), 1.0)
         u = math.floor(u * self.u_max_short)
         command_request = BrickpickCommand.Request()
         command_request.command = '/set_short_ctrl'
         command_request.u = u
-        response = self.brickpick_adapter_cli.call(command_request)  # type: BrickpickCommand.Response
-        return response.status
+        response_future = self.brickpick_adapter_cli.call_async(command_request)  # type: ignore
+        return response_future
     
-    def set_plunger_ctrl(self, u : float) -> str:
+    def set_plunger_ctrl(self, u : float):
         # TODO - Add set_plunger_ctrl to brickpick embedded
         raise NotImplementedError
         u = min(max(u, -1.0), 1.0)
@@ -45,43 +43,43 @@ class BrickPickController:
         command_request = BrickpickCommand.Request()
         command_request.command = '/set_plunger_ctrl'
         command_request.u = u
-        response = self.brickpick_adapter_cli.call(command_request)  # type: BrickpickCommand.Response
-        return response.status
+        response_future = self.brickpick_adapter_cli.call_async(command_request)  # type: ignore
+        return response_future
 
-    def stop(self) -> str:
+    def stop(self):
         command_request = BrickpickCommand.Request()
         command_request.command = '/stop'
-        response = self.brickpick_adapter_cli.call(command_request)  # type: BrickpickCommand.Response
-        return response.status
+        response_future = self.brickpick_adapter_cli.call_async(command_request)  # type: ignore
+        return response_future
     
-    def set_long_target_mm(self, target_mm : float) -> str:
+    def set_long_target_mm(self, target_mm : float):
         command_request = BrickpickCommand.Request()
         command_request.command = '/set_long_target_mm'
         command_request.target_mm = target_mm
-        response = self.brickpick_adapter_cli.call(command_request)  # type: BrickpickCommand.Response
-        return response.status
+        response_future = self.brickpick_adapter_cli.call_async(command_request)  # type: ignore
+        return response_future
 
-    def set_short_target_mm(self, target_mm : float) -> str:
+    def set_short_target_mm(self, target_mm : float):
         command_request = BrickpickCommand.Request()
         command_request.command = '/set_short_target_mm'
         command_request.target_mm = target_mm
-        response = self.brickpick_adapter_cli.call(command_request)  # type: BrickpickCommand.Response
-        return response.status
+        response_future = self.brickpick_adapter_cli.call_async(command_request)  # type: ignore
+        return response_future
 
     # Blocking services
-    def plunger_up(self) -> str:
+    def plunger_up(self):
         command_request = BrickpickCommand.Request()
         command_request.command = '/goto_plunger'
         command_request.plunger_target = 0
-        response = self.brickpick_adapter_cli.call(command_request)  # type: BrickpickCommand.Response
-        return response.status
+        response_future = self.brickpick_adapter_cli.call_async(command_request)  # type: ignore
+        return response_future
 
-    def plunger_down(self) -> str:
+    def plunger_down(self):
         command_request = BrickpickCommand.Request()
         command_request.command = '/goto_plunger'
         command_request.plunger_target = 1
-        response = self.brickpick_adapter_cli.call(command_request)  # type: BrickpickCommand.Response
-        return response.status
+        response_future = self.brickpick_adapter_cli.call_async(command_request)  # type: ignore
+        return response_future
     
     def long_goto_brick(self, brick : int):
         command_request = BrickpickCommand.Request()
@@ -94,16 +92,16 @@ class BrickPickController:
         command_request = BrickpickCommand.Request()
         command_request.command = '/goto_short_brick'
         command_request.target_brick = brick
-        response_future = self.brickpick_adapter_cli.call(command_request) # type: ignore
+        response_future = self.brickpick_adapter_cli.call_async(command_request) # type: ignore
         return response_future
     
-    def reset(self) -> str:
+    def reset(self):
         # TODO - Add a reset command to brickpick embedded
         raise NotImplementedError
         command_request = BrickpickCommand.Request()
         command_request.command = '/reset'
-        response = self.brickpick_adapter_cli.call(command_request)  # type: BrickpickCommand.Response
-        return response.status
+        response_future = self.brickpick_adapter_cli.call_async(command_request)  # type: ignore
+        return response_future
     
 
 class URController:

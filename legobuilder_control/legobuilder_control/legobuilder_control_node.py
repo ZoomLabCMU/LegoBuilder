@@ -107,19 +107,13 @@ class LegoBuilderControlNode(Node):
         self.joint_states = joint_states
     
     def get_ee_pose(self):
-        # TODO - Add support for angled TCP offests, but this is really not necessary for the time being
+        # TODO - add support for angled TCPs but not super necessary
         tool0_trans = self.tf_buffer.lookup_transform('base', 'tool0', rclpy.time.Time())
         
         axis_angle = utils.quat_to_axis_angle([tool0_trans.transform.rotation.x, tool0_trans.transform.rotation.y,
                                                 tool0_trans.transform.rotation.z, tool0_trans.transform.rotation.w])
-        
-        # tool0_pose = [tool0_trans.transform.translation.x, tool0_trans.transform.translation.y, tool0_trans.transform.translation.z,
-        #               axis_angle[0], axis_angle[1], axis_angle[2]]
-        
 
         tcp_pose = tf2_geometry_msgs.do_transform_pose(self.tcp_pose, tool0_trans)
-        # axis_angle = utils.quat_to_axis_angle([tcp_pose.orientation.x, tcp_pose.orientation.y,
-        #                                         tcp_pose.orientation.z, tcp_pose.orientation.w])
         tcp_pose = [tcp_pose.position.x, tcp_pose.position.y, tcp_pose.position.z,
                       axis_angle[0], axis_angle[1], axis_angle[2]]
         return tcp_pose

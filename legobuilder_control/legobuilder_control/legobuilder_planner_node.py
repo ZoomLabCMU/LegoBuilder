@@ -242,10 +242,45 @@ class LegoBuilderPlannerNode(Node):
     #       2.b servoing motion?
     #       2.c Remote Center of Compliance?
     #   3. stop and release majority of pressure
+    def approach(self, target_pose : list[float], engage=True, jog_height=0.300):
+        '''
+        Approach a target pose by motion to a jog plane, motion accross a jog plane, and a path terminating tangent to the final orientation
+
+        
+        target_pose : Pose to approach to
+        engage : Whether or not to engage the studs on the brick or hover over
+        jog_height : Height of the jog plane in m
+        '''
+        # Move directly up to jog plane
+        jog_pose = self.get_ee_pose()
+        jog_pose[2] = jog_height
+        self.goto_TCP(jog_pose)
+
+        # Move directly over target pose
+        hover_pose = target_pose[:]
+        hover_pose[2] = jog_height
+        self.goto_TCP(hover_pose)
+
+        # Approach the brick at the target pose
+        approach_pose = target_pose[:]
+        approach_pose[2] += STUD_HEIGHT
+        self.goto_TCP(approach_pose)
+
+        # Engage the brick at the target pose
+        if engage:
+            self.goto_TCP(target_pose, time=2.0)
+
 
     def pick(self, brick : int, direction='long'):
-        # Break through rotation about a specified brick and axis
-        # Right now this assumes a vertical build plate and stud orientation
+        '''
+        Break away the end effector brick payload ending at a given brick [stud height] from the base
+        
+        brick : Set the TCP to brick * STUD_HEIGHT from the base
+        direction : Specify moment plate / axis of rotation for removal
+
+        TODO - Add a normal vector arg for pullback
+        TODO - Axis of rotation should be in EE coordinates
+        '''
         BRICK_MAX = 5
         ROTATION_ANGLE_DEG = 30.0
         RELEASE_VEC = [0.0, 0.0, STUD_HEIGHT]
@@ -278,6 +313,27 @@ class LegoBuilderPlannerNode(Node):
 
         # Pull up to complete pick
         self.move_TCP(RELEASE_VEC)
+
+        # Re-zero moment plates
+        if direction == 'long':
+            result_future = self.bp_controller.set_long_target_mm(0.0)
+            rclpy.spin_until_future_complete(self, result_future)
+        elif direction == 'short':
+            result_future = self.bp_controller.set_short_target_mm(0.0)
+            rclpy.spin_until_future_complete(self, result_future)
+        else:
+            raise NotImplementedError
+
+    def deposit(self):
+        '''
+        Deposit the full end effector payload
+        '''
+
+        plunger_future = self.bp_controller.plunger_down()
+        self.move_TCP([0.0, 0.0, STUD_HEIGHT])
+        rclpy.spin_until_future_complete(self, plunger_future)
+        plunger_future = self.bp_controller.plunger_up()
+        rclpy.spin_until_future_complete(self, plunger_future)
 
     ### Perception ###
     def display_ws_img(self, time_ms=5000, title='Workspace'):
@@ -347,22 +403,7 @@ def demo1(args=None):
         lb_planner_node.display_ws_img()
         # planning...
         
-        # Move to pick location
-        waypoint_2 = block_pose[:]
-        waypoint_2[2] += STUD_HEIGHT
-        lb_planner_node.goto_TCP(waypoint_2, time=2.0)
-        T.sleep(1)
-
-        # Anlyize EE view
-        # target_localized = lb_planner_node.get_ee_target()...
-        lb_planner_node.display_ee_img()
-        # re-planning...
-
-        # Engage brick
-        lb_planner_node.move_TCP(
-            displacement=[0.0, 0.0, -STUD_HEIGHT],
-            time=1.0
-        )
+        lb_planner_node.approach(block_pose)
         T.sleep(1)
         lb_planner_node.pick(brick, direction=direction)
         T.sleep(1)
