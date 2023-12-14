@@ -7,7 +7,7 @@ import rclpy.time
 from rclpy.action import ActionServer, GoalResponse, CancelResponse
 
 from std_msgs.msg import String
-from geometry_msgs.msg import WrenchStamped, Pose
+from geometry_msgs.msg import WrenchStamped, Pose, TransformStamped
 from sensor_msgs.msg import JointState
 
 from legobuilder_interfaces.srv import BrickpickCommand
@@ -32,14 +32,9 @@ block_length = 0.0318
 class LegoBuilderControlNode(Node):
     def __init__(self):
         super().__init__('Legobuilder_control_node') # type: ignore
-        self.motion_tolerance_thresh_m = 0.0005 # m
-        self.motion_tolerance_thresh_rad = 0.001 # rad
+        self.motion_tolerance_thresh_m = 0.001 # m
+        self.motion_tolerance_thresh_rad = 0.01 # rad
         
-        # The TCP offset from the tool0 (flange) pose
-        # This is due to the fact that altering the TCP using the teach pad or ur script interface does not change
-        # the tool0 transform and the tool0_controller frame does not exist with my current ur_robot_driver version (humble)
-        self.tcp_pose = Pose()
-
         # State Estimation
         self.joint_states = JointState()
         self.ee_wrench = WrenchStamped()
@@ -70,7 +65,8 @@ class LegoBuilderControlNode(Node):
             self.recv_ur_wrench,
             10
         )
-        # Transform buffer subscriber
+        # Transform buffer
+        self.tf_buffer_pub = tf2_ros.StaticTransformBroadcaster(self)
         self.tf_buffer_sub = tf2_ros.TransformListener(
             self.tf_buffer,
             self,
@@ -107,16 +103,13 @@ class LegoBuilderControlNode(Node):
         self.joint_states = joint_states
     
     def get_ee_pose(self):
-        # TODO - add support for angled TCPs but not super necessary
-        tool0_trans = self.tf_buffer.lookup_transform('base', 'tool0', rclpy.time.Time())
-        
-        axis_angle = utils.quat_to_axis_angle([tool0_trans.transform.rotation.x, tool0_trans.transform.rotation.y,
-                                                tool0_trans.transform.rotation.z, tool0_trans.transform.rotation.w])
+        trans = self.tf_buffer.lookup_transform('base', 'tool0_controller', rclpy.time.Time())
 
-        tcp_pose = tf2_geometry_msgs.do_transform_pose(self.tcp_pose, tool0_trans)
-        tcp_pose = [tcp_pose.position.x, tcp_pose.position.y, tcp_pose.position.z,
-                      axis_angle[0], axis_angle[1], axis_angle[2]]
-        return tcp_pose
+        axis_angle = utils.quat_to_axis_angle([trans.transform.rotation.x, trans.transform.rotation.y,
+                                                trans.transform.rotation.z, trans.transform.rotation.w])
+
+        return [trans.transform.translation.x, trans.transform.translation.y, trans.transform.translation.z,
+                axis_angle[0], axis_angle[1], axis_angle[2]]
 
     def get_joint_positions(self):
         joint_states = self.joint_states
@@ -162,7 +155,7 @@ class LegoBuilderControlNode(Node):
             result.result = "Complete"
         elif cmd == "home":
             # self.bp_controller.reset()
-            home_joint_angles = [90.0, -90.0, 90.0, -90.0, -90.0, -135.0]
+            home_joint_angles = [90.0, -90.0, 90.0, -90.0, -90.0, -180.0]
             self.control_goal.joint_positions = home_joint_angles
             self.control_goal.use_time = True
             self.control_goal.time = 10.0
@@ -194,15 +187,21 @@ class LegoBuilderControlNode(Node):
             goal_msg = self.control_goal
             tcp_pose = goal_msg.ee_pose
 
-            # Set the internal tcp PoseStamped
-            self.tcp_pose.position.x = tcp_pose[0]
-            self.tcp_pose.position.y = tcp_pose[1]
-            self.tcp_pose.position.z = tcp_pose[2]
+            # Set TF buffer kinematics for tool0
+            TCP_transform = TransformStamped()
+            TCP_transform.header.frame_id = 'tool0'
+            TCP_transform.header.stamp = rclpy.time.Time().to_msg()
+            TCP_transform.child_frame_id = 'tool0_controller'
+            TCP_transform.transform.translation.x = tcp_pose[0]
+            TCP_transform.transform.translation.y = tcp_pose[1]
+            TCP_transform.transform.translation.z = tcp_pose[2]
             quat = utils.axis_angle_to_quaternion([tcp_pose[3], tcp_pose[4], tcp_pose[5]])
-            self.tcp_pose.orientation.x = quat[0]
-            self.tcp_pose.orientation.y = quat[1]
-            self.tcp_pose.orientation.z = quat[2]
-            self.tcp_pose.orientation.w = quat[3]
+            TCP_transform.transform.rotation.x = quat[0]
+            TCP_transform.transform.rotation.y = quat[1]
+            TCP_transform.transform.rotation.z = quat[2]
+            TCP_transform.transform.rotation.w = quat[3]
+
+            self.tf_buffer_pub.sendTransform(TCP_transform)
 
             # Set the TCP on the ur system
             self.ur_controller.set_tcp(tcp_pose)

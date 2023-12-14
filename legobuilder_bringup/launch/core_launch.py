@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.conditions import IfCondition, LaunchConfigurationEquals
+from launch.conditions import IfCondition, LaunchConfigurationEquals, LaunchConfigurationNotEquals
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -35,16 +35,23 @@ def generate_launch_description():
         name='brickpick_adapter'
     )
     # UR5 Driver
-    # TODO - Write me
     '''
-    ros2 launch ur_robot_driver ur_control.launch.py ur_type:=ur5e robot_ip:=192.168.??.???
+    ros2 launch ur_robot_driver ur_control.launch.py ur_type:=ur5e robot_ip:=192.168.1.12
     '''
-    ur5e_ld = IncludeLaunchDescription(
+    ur5e_ld_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([get_package_share_directory('ur_robot_driver'), '/launch/', 'ur_control.launch.py']),
         launch_arguments={'ur_type': 'ur5e',
                           'robot_ip': '192.168.56.101',
-                          'launch_rviz': LaunchConfiguration('sim')}.items()
-                          
+                          'launch_rviz': 'true'}.items(),
+        condition=LaunchConfigurationEquals('sim', 'true')
+    )
+
+    ur5e_ld_real = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([get_package_share_directory('ur_robot_driver'), '/launch/', 'ur_control.launch.py']),
+        launch_arguments={'ur_type': 'ur5e',
+                          'robot_ip': '192.168.1.12',
+                          'launch_rviz': 'false'}.items(),
+        condition=LaunchConfigurationNotEquals('sim', 'true')
     )
 
     ### Sensors ###
@@ -81,6 +88,7 @@ def generate_launch_description():
     ld.add_action(lb_control_node)
 
     ld.add_action(realsense_ld)
-    ld.add_action(ur5e_ld)
+    ld.add_action(ur5e_ld_sim)
+    ld.add_action(ur5e_ld_real)
 
     return ld

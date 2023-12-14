@@ -7,10 +7,12 @@ from rclpy.node import Node
 import numpy as np
 import cv2
 import cv_bridge
-import tf2_ros
-import threading
 
-from geometry_msgs.msg import Wrench
+import tf2_ros
+from tf2_ros import TransformStamped
+import tf2_geometry_msgs
+
+from geometry_msgs.msg import Wrench, PoseStamped, Transform
 from sensor_msgs.msg import Image
 
 from legobuilder_interfaces.action import LegobuilderCommand
@@ -22,8 +24,9 @@ from legobuilder_control.Controllers import BrickPickController
 # Constants
 STUD_HEIGHT = 0.0096 # m
 STUD_WIDTH = 0.008 # m
-TCP_BASE = np.asarray([-2 * STUD_WIDTH, 1 * STUD_WIDTH, 0.140, 0, 0, 0])
-REGISTRATION_POSE_PRESET = [0.15, -0.50, 0.04, -2.9, 1.2, -0.0]
+TCP_BASE = np.asarray([-2 * STUD_WIDTH, 1 * STUD_WIDTH, 0.140, 0.0, 0.0, 0.0])
+REGISTRATION_POSE_PRESET = [0.250, -0.600, 0.150, np.pi, 0.0, 0.0]
+RAPID_PLANE = 0.300 # m
 
 class LegoBuilderPlannerNode(Node):
 
@@ -43,6 +46,7 @@ class LegoBuilderPlannerNode(Node):
 
         # Transform buffer subscriber
         self.tf_buffer = tf2_ros.Buffer()
+        self.tf_buffer_pub = tf2_ros.StaticTransformBroadcaster(self)
         self.tf_buffer_sub = tf2_ros.TransformListener(
             self.tf_buffer,
             self
@@ -69,7 +73,7 @@ class LegoBuilderPlannerNode(Node):
         self.ee_img = img
 
     def get_ee_pose(self):
-        trans = self.tf_buffer.lookup_transform('base', 'tool0', rclpy.time.Time())
+        trans = self.tf_buffer.lookup_transform('base', 'tool0_controller', rclpy.time.Time())
 
         axis_angle = utils.quat_to_axis_angle([trans.transform.rotation.x, trans.transform.rotation.y,
                                                 trans.transform.rotation.z, trans.transform.rotation.w])
@@ -234,14 +238,66 @@ class LegoBuilderPlannerNode(Node):
             rclpy.spin_once(self)
 
     ### Composite Commands ###
-    # approach() : approach a target pose along a given normal vector
-    #   Call this from somewhere near/reasonable to generate a trajectory and it should:
-    #   1. rapid to a point {approach buffer} along the normal away from the approached surface
-    #   2. slowly engage the studs of the approached surface
-    #       2.a FT limiting?
-    #       2.b servoing motion?
-    #       2.c Remote Center of Compliance?
-    #   3. stop and release majority of pressure
+    def register_build_plate(self, reg_brick_location=[10, -10, 5], reg_brick_orientation=[0.0, 1.0, 0.0, 0.0]):
+        '''
+        Use the TCP and a known registration brick to set the build plate origin frame
+
+        reg_brick_location : registration brick location on the build plate in STUDS
+        reg_brick_orientation : registration brick orientation on the build plate in QUATERNIONS
+        '''
+        # TODO - use inverse transforms instead of hardcoding the inverse. Should be able to estalbish registration within the plate frame to make this transform
+        # TODO - record plate frame wrt base instead of registration
+
+        # Set the TCP to the base TCP
+        self.set_TCP(TCP_BASE.tolist())
+
+        # Enable freedrive
+        self.enable_freedrive()
+
+        # Wait for user to drive to registration brick
+        self.goto_TCP(REGISTRATION_POSE_PRESET, time=15.0)
+        _ = input("Press 'Enter' when registration brick is engaged")
+
+        # Set the registration and plate frames
+        registration_pose = self.get_ee_pose()
+        reg_pose_quat = utils.axis_angle_to_quaternion(registration_pose[3:6])
+        registration_trans = TransformStamped()
+        registration_trans.header.frame_id = 'base'
+        registration_trans.header.stamp = rclpy.time.Time().to_msg()
+        registration_trans.child_frame_id = 'registration'
+        registration_trans.transform.translation.x = registration_pose[0]
+        registration_trans.transform.translation.y = registration_pose[1]
+        registration_trans.transform.translation.z = registration_pose[2]
+        registration_trans.transform.rotation.x = reg_pose_quat[0]
+        registration_trans.transform.rotation.y = reg_pose_quat[1]
+        registration_trans.transform.rotation.z = reg_pose_quat[2]
+        registration_trans.transform.rotation.w = reg_pose_quat[3]
+        self.tf_buffer_pub.sendTransform(registration_trans)
+
+        plate_to_reg = TransformStamped()
+        plate_to_reg.header.frame_id = 'registration'
+        plate_to_reg.header.stamp = rclpy.time.Time().to_msg()
+        plate_to_reg.child_frame_id = 'plate'
+        plate_to_reg.transform.translation.x = reg_brick_location[0] * STUD_WIDTH
+        plate_to_reg.transform.translation.y = reg_brick_location[1] * STUD_WIDTH
+        plate_to_reg.transform.translation.z = reg_brick_location[2] * STUD_HEIGHT
+        plate_to_reg.transform.rotation.x = reg_brick_orientation[0]
+        plate_to_reg.transform.rotation.y = reg_brick_orientation[1]
+        plate_to_reg.transform.rotation.z = reg_brick_orientation[2]
+        plate_to_reg.transform.rotation.w = reg_brick_orientation[3]
+        self.tf_buffer_pub.sendTransform(plate_to_reg)
+
+        # Disable freedrive
+        T.sleep(1)
+        self.disable_freedrive()
+
+        # Disengage registration brick
+        self.move_TCP([0.0, 0.0, STUD_HEIGHT], time=1.0)
+        curr_pose = self.get_ee_pose()
+        dz = RAPID_PLANE - curr_pose[2]
+        self.move_TCP([0.0, 0.0, dz], time=1.0)
+
+
     def approach(self, target_pose : list[float], engage=True, jog_height=0.300):
         '''
         Approach a target pose by motion to a jog plane, motion accross a jog plane, and a path terminating tangent to the final orientation
@@ -254,17 +310,17 @@ class LegoBuilderPlannerNode(Node):
         # Move directly up to jog plane
         jog_pose = self.get_ee_pose()
         jog_pose[2] = jog_height
-        self.goto_TCP(jog_pose)
+        self.goto_TCP(jog_pose, time=1.0)
 
         # Move directly over target pose
         hover_pose = target_pose[:]
         hover_pose[2] = jog_height
-        self.goto_TCP(hover_pose)
+        self.goto_TCP(hover_pose, time=1.0)
 
         # Approach the brick at the target pose
         approach_pose = target_pose[:]
         approach_pose[2] += STUD_HEIGHT
-        self.goto_TCP(approach_pose)
+        self.goto_TCP(approach_pose, time=4.0)
 
         # Engage the brick at the target pose
         if engage:
@@ -367,31 +423,14 @@ def demo1(args=None):
     # Home system
     lb_planner_node.home()
 
-    # Freedrive to registration pose
-    lb_planner_node.enable_freedrive()
-    print("Freedrive enabled, move end effector to registration brick")
-    lb_planner_node.goto_TCP(
-        REGISTRATION_POSE_PRESET,
-        wrench_thresh=None,
-        time=10.0
-    )
-    lb_planner_node.display_ws_img()
-    _ = input("Press 'Enter' to continue")
-    lb_planner_node.disable_freedrive()
-    T.sleep(1)
+    # Register the build plate
+    #   (freedrive to registration brick)
+    lb_planner_node.register_build_plate()
 
-    # Record registration pose
-    registration_pose = lb_planner_node.get_ee_pose()
-    block_pose = registration_pose[:] # clone
-
-    # Move to safe pose
-    waypoint_1 = [block_pose[0], block_pose[1], block_pose[2] + 10*STUD_HEIGHT,
-                  block_pose[3], block_pose[4], block_pose[5]]
-    lb_planner_node.goto_TCP(waypoint_1, time=5.0)
+    #lb_planner_node.display_ws_img()
     
     # Execute the skills in each trial
     for trial in range(num_trials):
-        brick = trial + 1
         # direction = 'long' if trial % 2 == 0 else 'short'
         direction = 'long'
 
@@ -400,14 +439,15 @@ def demo1(args=None):
 
         # Anylize workspace
         # detections = lb_planner_node.get_ws_detections()
-        lb_planner_node.display_ws_img()
+        # lb_planner_node.display_ws_img()
         # planning...
         
-        lb_planner_node.approach(block_pose)
-        T.sleep(1)
-        lb_planner_node.pick(brick, direction=direction)
-        T.sleep(1)
-        lb_planner_node.goto_TCP(waypoint_1, time=2.0)
+        # Approach the target stack
+        lb_planner_node.approach(REGISTRATION_POSE_PRESET)
+
+        # Pick from the target stack
+        lb_planner_node.pick(trial, direction=direction)
+
         # brickpick srv: withdraw for pick
 
         # perception srv: get lego bboxes
@@ -420,9 +460,6 @@ def demo1(args=None):
         # brickpick srv: withdraw for place
 
         # save imgs and anlyize...
-    # basic: home_arm
-    # basic: home_ee
-
 
     lb_planner_node.home()
 

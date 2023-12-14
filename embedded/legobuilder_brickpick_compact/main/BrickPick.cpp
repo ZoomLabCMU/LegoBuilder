@@ -398,7 +398,6 @@ void BrickPick::update_plunger_ctrls() {
     _plunger_motor->setSpeed(0);
     _plunger_motor->run(RELEASE);
 
-    Serial.println("Plunger Stalled");
     return;
   }
   _plunger_motor->run((plunger_ctrl < 0) ? FORWARD : BACKWARD);
