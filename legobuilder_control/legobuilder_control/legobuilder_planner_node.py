@@ -1,3 +1,4 @@
+from matplotlib import rc
 import rclpy
 import rclpy.time
 import time as T
@@ -25,7 +26,7 @@ from legobuilder_control.Controllers import BrickPickController
 STUD_HEIGHT = 0.0096 # m
 STUD_WIDTH = 0.008 # m
 TCP_BASE = np.asarray([-2 * STUD_WIDTH, 1 * STUD_WIDTH, 0.140, 0.0, 0.0, 0.0])
-REGISTRATION_POSE_PRESET = [0.250, -0.600, 0.150, np.pi, 0.0, 0.0]
+REGISTRATION_POSE_PRESET = [0.250, -0.300, 0.150, np.pi, 0.0, 0.0]
 RAPID_PLANE = 0.300 # m
 
 class LegoBuilderPlannerNode(Node):
@@ -335,7 +336,6 @@ class LegoBuilderPlannerNode(Node):
         direction : Specify moment plate / axis of rotation for removal
 
         TODO - Add a normal vector arg for pullback
-        TODO - Axis of rotation should be in EE coordinates
         '''
         BRICK_MAX = 5
         ROTATION_ANGLE_DEG = 30.0
@@ -390,6 +390,7 @@ class LegoBuilderPlannerNode(Node):
         rclpy.spin_until_future_complete(self, plunger_future)
         plunger_future = self.bp_controller.plunger_up()
         rclpy.spin_until_future_complete(self, plunger_future)
+        self.set_TCP(TCP_BASE.tolist())
 
     ### Perception ###
     def display_ws_img(self, time_ms=5000, title='Workspace'):
@@ -409,16 +410,13 @@ class LegoBuilderPlannerNode(Node):
 def demo1(args=None):
     # args
     num_trials = 5
-    # directory_path = 'path/to/datastore'
 
     # ROS
     rclpy.init(args=args)
     lb_planner_node = LegoBuilderPlannerNode()
 
     # Set TCP
-    TCP_offset = np.asarray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-    tcp_pose = (TCP_BASE + TCP_offset).tolist()
-    lb_planner_node.set_TCP(tcp_pose)
+    lb_planner_node.set_TCP(TCP_BASE.tolist())
 
     # Home system
     lb_planner_node.home()
@@ -427,39 +425,92 @@ def demo1(args=None):
     #   (freedrive to registration brick)
     lb_planner_node.register_build_plate()
 
-    #lb_planner_node.display_ws_img()
-    
+    # Set the skills todo
+    PICK_ROW_Y = 32 * STUD_WIDTH
+    PLACE_ROW_Y = 48 * STUD_WIDTH
+    COL_SPACING = 8 * STUD_WIDTH
+    COL0 = 8 * STUD_WIDTH
+
+    skills = [{'n': skill, 
+               'direction': 'long',
+               'pick_origin_plate': utils.np_to_posestamped([COL0 + skill * COL_SPACING, PICK_ROW_Y, 0.0], [0.0, 1.0, 0.0, 0.0], 'plate'),
+               'place_origin_plate': utils.np_to_posestamped([COL0 + skill * COL_SPACING, PLACE_ROW_Y, 0.0], [0.0, 1.0, 0.0, 0.0], 'plate')} for skill in range(5)]
     # Execute the skills in each trial
     for trial in range(num_trials):
-        # direction = 'long' if trial % 2 == 0 else 'short'
-        direction = 'long'
-
         print(F"### Beginning trial {trial} ###")
-        T.sleep(5)
-
-        # Anylize workspace
-        # detections = lb_planner_node.get_ws_detections()
-        # lb_planner_node.display_ws_img()
-        # planning...
         
-        # Approach the target stack
-        lb_planner_node.approach(REGISTRATION_POSE_PRESET)
+        for skill in skills:
+            T.sleep(2)
+            n_bricks = skill['n']
+            direction = skill['direction']
+            pick_origin_plate = skill['pick_origin_plate']
+            place_origin_plate = skill['place_origin_plate']
 
-        # Pick from the target stack
-        lb_planner_node.pick(trial, direction=direction)
+            tmp_plate = TransformStamped()
+            tmp_plate.header.stamp = rclpy.time.Time().to_msg()
+            tmp_plate.header.frame_id = 'plate'
+            tmp_plate.child_frame_id = 'tmp_plate'
+            tmp_plate.transform.translation.x = pick_origin_plate.pose.position.x
+            tmp_plate.transform.translation.y = pick_origin_plate.pose.position.y
+            tmp_plate.transform.translation.z = pick_origin_plate.pose.position.z
+            tmp_plate.transform.rotation.x = pick_origin_plate.pose.orientation.x
+            tmp_plate.transform.rotation.y = pick_origin_plate.pose.orientation.y
+            tmp_plate.transform.rotation.z = pick_origin_plate.pose.orientation.z
+            tmp_plate.transform.rotation.w = pick_origin_plate.pose.orientation.w
+            lb_planner_node.tf_buffer_pub.sendTransform(tmp_plate)
 
-        # brickpick srv: withdraw for pick
+            pick_origin_base = tf2_geometry_msgs.do_transform_pose_stamped(pick_origin_plate, lb_planner_node.tf_buffer.lookup_transform('base', 'plate', rclpy.time.Time()))
+            place_origin_base = tf2_geometry_msgs.do_transform_pose_stamped(place_origin_plate, lb_planner_node.tf_buffer.lookup_transform('base', 'plate', rclpy.time.Time()))
+            
 
-        # perception srv: get lego bboxes
-        # planning...
-        # goto: move for place
-        # brickpick srv: set moment plate
-        # basic: set tcp
-        # tcp twist: break for place
-        # goto: withdraw for place
-        # brickpick srv: withdraw for place
+            tmp_base = TransformStamped()
+            tmp_base.header.stamp = rclpy.time.Time().to_msg()
+            tmp_base.header.frame_id = 'base'
+            tmp_base.child_frame_id = 'tmp_base'
+            tmp_base.transform.translation.x = pick_origin_base.pose.position.x
+            tmp_base.transform.translation.y = pick_origin_base.pose.position.y
+            tmp_base.transform.translation.z = pick_origin_base.pose.position.z
+            tmp_base.transform.rotation.x = pick_origin_base.pose.orientation.x
+            tmp_base.transform.rotation.y = pick_origin_base.pose.orientation.y
+            tmp_base.transform.rotation.z = pick_origin_base.pose.orientation.z
+            tmp_base.transform.rotation.w = pick_origin_base.pose.orientation.w
+            lb_planner_node.tf_buffer_pub.sendTransform(tmp_base)
 
-        # save imgs and anlyize...
+
+            # Approach the target stack
+            pick_TCP_pose = [
+                pick_origin_base.pose.position.x,
+                pick_origin_base.pose.position.y,
+                pick_origin_base.pose.position.z
+            ]
+
+            pick_TCP_pose.extend(utils.quat_to_axis_angle([
+                pick_origin_base.pose.orientation.x,
+                pick_origin_base.pose.orientation.y,
+                pick_origin_base.pose.orientation.z,
+                pick_origin_base.pose.orientation.w
+            ]))
+            lb_planner_node.approach(pick_TCP_pose)
+
+            # Pick from the target stack
+            #lb_planner_node.pick(n_bricks, direction=direction)
+
+            # Approach the deposit location
+            place_TCP_pose = [
+                place_origin_base.pose.position.x,
+                place_origin_base.pose.position.y,
+                place_origin_base.pose.position.z
+            ]
+            place_TCP_pose.extend(utils.quat_to_axis_angle([
+                place_origin_base.pose.orientation.x,
+                place_origin_base.pose.orientation.y,
+                place_origin_base.pose.orientation.z,
+                place_origin_base.pose.orientation.w
+            ]))
+            lb_planner_node.approach(place_TCP_pose)
+
+            # Deposit the brick stack
+            #lb_planner_node.deposit()
 
     lb_planner_node.home()
 

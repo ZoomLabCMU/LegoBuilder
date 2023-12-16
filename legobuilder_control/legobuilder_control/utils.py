@@ -2,6 +2,10 @@ import math
 import numpy as np
 import subprocess
 
+import rclpy
+import rclpy.time
+from geometry_msgs.msg import PoseStamped
+
 # Function from https://stackoverflow.com/questions/21030391/how-to-normalize-an-array-in-numpy
 def normalize(v):
     norm = np.linalg.norm(v)
@@ -73,3 +77,22 @@ def save_proprioceptive(dir_path, filename):
     cmd = "rosbag record /tf /joint_states /wrench -O " + dir_path + filename
     bag_p = subprocess.Popen("exec " + cmd, stdout=subprocess.PIPE, shell=True)
     return bag_p
+
+
+def np_to_posestamped(position, orientation, frame_id):
+	res = PoseStamped()
+	res.header.stamp = rclpy.time.Time().to_msg()
+	res.header.frame_id = frame_id
+	res.pose.position.x = position[0]
+	res.pose.position.y = position[1]
+	res.pose.position.z = position[2]
+	res.pose.orientation.x = orientation[0]
+	res.pose.orientation.y = orientation[1]
+	res.pose.orientation.z = orientation[2]
+	res.pose.orientation.w = orientation[3]
+
+	return res
+
+def posestamped_to_np(p : PoseStamped):
+	return [p.pose.position.x, p.pose.position.y, p.pose.position.z,
+		 	p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w]
