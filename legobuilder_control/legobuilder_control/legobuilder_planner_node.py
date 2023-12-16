@@ -8,6 +8,7 @@ from rclpy.node import Node
 import numpy as np
 import cv2
 import cv_bridge
+import copy
 
 import tf2_ros
 from tf2_ros import TransformStamped
@@ -407,6 +408,20 @@ class LegoBuilderPlannerNode(Node):
         cv2.waitKey(time_ms)
         cv2.destroyAllWindows()
 
+def put_pose_in_rviz(tf_publisher, pose : PoseStamped, name):
+    trans = TransformStamped()
+    trans.header.stamp = rclpy.time.Time().to_msg()
+    trans.header.frame_id = pose.header.frame_id
+    trans.child_frame_id = name
+    trans.transform.translation.x = pose.pose.position.x
+    trans.transform.translation.y = pose.pose.position.y
+    trans.transform.translation.z = pose.pose.position.z
+    trans.transform.rotation.x = pose.pose.orientation.x
+    trans.transform.rotation.y = pose.pose.orientation.y
+    trans.transform.rotation.z = pose.pose.orientation.z
+    trans.transform.rotation.w = pose.pose.orientation.w
+    tf_publisher.sendTransform(trans)
+
 def demo1(args=None):
     # args
     num_trials = 5
@@ -431,7 +446,7 @@ def demo1(args=None):
     COL_SPACING = 8 * STUD_WIDTH
     COL0 = 8 * STUD_WIDTH
 
-    skills = [{'n': skill, 
+    skills = [{'n': skill + 1, 
                'direction': 'long',
                'pick_origin_plate': utils.np_to_posestamped([COL0 + skill * COL_SPACING, PICK_ROW_Y, 0.0], [0.0, 1.0, 0.0, 0.0], 'plate'),
                'place_origin_plate': utils.np_to_posestamped([COL0 + skill * COL_SPACING, PLACE_ROW_Y, 0.0], [0.0, 1.0, 0.0, 0.0], 'plate')} for skill in range(5)]
@@ -441,72 +456,45 @@ def demo1(args=None):
         
         for skill in skills:
             T.sleep(2)
+            # Unpack skill parameters
             n_bricks = skill['n']
             direction = skill['direction']
-            pick_origin_plate = skill['pick_origin_plate']
-            place_origin_plate = skill['place_origin_plate']
+            pick_origin_plate = skill['pick_origin_plate'] # type: PoseStamped
+            place_origin_plate = skill['place_origin_plate'] #type: PoseStamped
 
-            tmp_plate = TransformStamped()
-            tmp_plate.header.stamp = rclpy.time.Time().to_msg()
-            tmp_plate.header.frame_id = 'plate'
-            tmp_plate.child_frame_id = 'tmp_plate'
-            tmp_plate.transform.translation.x = pick_origin_plate.pose.position.x
-            tmp_plate.transform.translation.y = pick_origin_plate.pose.position.y
-            tmp_plate.transform.translation.z = pick_origin_plate.pose.position.z
-            tmp_plate.transform.rotation.x = pick_origin_plate.pose.orientation.x
-            tmp_plate.transform.rotation.y = pick_origin_plate.pose.orientation.y
-            tmp_plate.transform.rotation.z = pick_origin_plate.pose.orientation.z
-            tmp_plate.transform.rotation.w = pick_origin_plate.pose.orientation.w
-            lb_planner_node.tf_buffer_pub.sendTransform(tmp_plate)
+            # Establish approach points in plate coordinates
+            pick_pose_plate = copy.deepcopy(pick_origin_plate)
+            pick_pose_plate.pose.position.z += 5 * STUD_HEIGHT
+            place_pose_plate = copy.deepcopy(place_origin_plate)
+            return_pick_pose_plate = copy.deepcopy(place_pose_plate)
+            return_pick_pose_plate.pose.position.z += n_bricks * STUD_HEIGHT
+            return_place_pose_plate = copy.deepcopy(pick_pose_plate)
+            return_place_pose_plate.pose.position.z -= n_bricks * STUD_HEIGHT
 
-            pick_origin_base = tf2_geometry_msgs.do_transform_pose_stamped(pick_origin_plate, lb_planner_node.tf_buffer.lookup_transform('base', 'plate', rclpy.time.Time()))
-            place_origin_base = tf2_geometry_msgs.do_transform_pose_stamped(place_origin_plate, lb_planner_node.tf_buffer.lookup_transform('base', 'plate', rclpy.time.Time()))
+            # Transform to base coordinates
+            pick_pose_base = tf2_geometry_msgs.do_transform_pose_stamped(pick_pose_plate, lb_planner_node.tf_buffer.lookup_transform('base', 'plate', rclpy.time.Time()))
+            place_pose_base = tf2_geometry_msgs.do_transform_pose_stamped(place_pose_plate, lb_planner_node.tf_buffer.lookup_transform('base', 'plate', rclpy.time.Time()))
+            return_pick_pose_base = tf2_geometry_msgs.do_transform_pose_stamped(return_pick_pose_plate, lb_planner_node.tf_buffer.lookup_transform('base', 'plate', rclpy.time.Time()))
+            return_place_pose_base = tf2_geometry_msgs.do_transform_pose_stamped(return_place_pose_plate, lb_planner_node.tf_buffer.lookup_transform('base', 'plate', rclpy.time.Time()))
             
+            pick_TCP_pose = utils.posestamped_to_TCP(pick_pose_base)
+            place_TCP_pose = utils.posestamped_to_TCP(place_pose_base)
+            return_pick_TCP_pose = utils.posestamped_to_TCP(return_pick_pose_base)
+            return_place_TCP_pose = utils.posestamped_to_TCP(return_place_pose_base)
 
-            tmp_base = TransformStamped()
-            tmp_base.header.stamp = rclpy.time.Time().to_msg()
-            tmp_base.header.frame_id = 'base'
-            tmp_base.child_frame_id = 'tmp_base'
-            tmp_base.transform.translation.x = pick_origin_base.pose.position.x
-            tmp_base.transform.translation.y = pick_origin_base.pose.position.y
-            tmp_base.transform.translation.z = pick_origin_base.pose.position.z
-            tmp_base.transform.rotation.x = pick_origin_base.pose.orientation.x
-            tmp_base.transform.rotation.y = pick_origin_base.pose.orientation.y
-            tmp_base.transform.rotation.z = pick_origin_base.pose.orientation.z
-            tmp_base.transform.rotation.w = pick_origin_base.pose.orientation.w
-            lb_planner_node.tf_buffer_pub.sendTransform(tmp_base)
-
+            # Add frames to rviz
+            put_pose_in_rviz(lb_planner_node.tf_buffer_pub, pick_pose_plate, f'pick_{n_bricks}')
+            put_pose_in_rviz(lb_planner_node.tf_buffer_pub, place_pose_plate, f'place_{n_bricks}')
+            put_pose_in_rviz(lb_planner_node.tf_buffer_pub, return_pick_pose_plate, f'return_pick_{n_bricks}')
+            put_pose_in_rviz(lb_planner_node.tf_buffer_pub, return_place_pose_plate, f'return_place_{n_bricks}')
 
             # Approach the target stack
-            pick_TCP_pose = [
-                pick_origin_base.pose.position.x,
-                pick_origin_base.pose.position.y,
-                pick_origin_base.pose.position.z
-            ]
-
-            pick_TCP_pose.extend(utils.quat_to_axis_angle([
-                pick_origin_base.pose.orientation.x,
-                pick_origin_base.pose.orientation.y,
-                pick_origin_base.pose.orientation.z,
-                pick_origin_base.pose.orientation.w
-            ]))
             lb_planner_node.approach(pick_TCP_pose)
 
             # Pick from the target stack
             #lb_planner_node.pick(n_bricks, direction=direction)
 
             # Approach the deposit location
-            place_TCP_pose = [
-                place_origin_base.pose.position.x,
-                place_origin_base.pose.position.y,
-                place_origin_base.pose.position.z
-            ]
-            place_TCP_pose.extend(utils.quat_to_axis_angle([
-                place_origin_base.pose.orientation.x,
-                place_origin_base.pose.orientation.y,
-                place_origin_base.pose.orientation.z,
-                place_origin_base.pose.orientation.w
-            ]))
             lb_planner_node.approach(place_TCP_pose)
 
             # Deposit the brick stack

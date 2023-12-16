@@ -96,3 +96,19 @@ def np_to_posestamped(position, orientation, frame_id):
 def posestamped_to_np(p : PoseStamped):
 	return [p.pose.position.x, p.pose.position.y, p.pose.position.z,
 		 	p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w]
+
+def posestamped_to_TCP(p : PoseStamped):
+	# return [x, y, z, Rx, Ry, Rz] for ur script
+	TCP_pose = [
+		p.pose.position.x,
+		p.pose.position.y,
+		p.pose.position.z
+	]
+
+	TCP_pose.extend(quat_to_axis_angle([
+		p.pose.orientation.x,
+		p.pose.orientation.y,
+		p.pose.orientation.z,
+		p.pose.orientation.w
+	]))
+	return TCP_pose
