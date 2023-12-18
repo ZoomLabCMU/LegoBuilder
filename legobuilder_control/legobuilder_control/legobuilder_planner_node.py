@@ -1,4 +1,3 @@
-from matplotlib import rc
 import rclpy
 import rclpy.time
 import time as T
@@ -134,18 +133,11 @@ class LegoBuilderPlannerNode(Node):
         while not self.lb_control_goal_terminated:
             rclpy.spin_once(self)
 
-    def enable_freedrive(self):
+    def freedrive(self, time : float):
         self.get_logger().info(f'Enabling freedrive')
         goal = LegobuilderCommand.Goal()
-        goal.cmd = "enable_freedrive"
-        self.lb_control_send_goal(goal)
-        while not self.lb_control_goal_terminated:
-            rclpy.spin_once(self)
-
-    def disable_freedrive(self):
-        self.get_logger().info(f'Disabling freedrive')
-        goal = LegobuilderCommand.Goal()
-        goal.cmd = "disable_freedrive"
+        goal.cmd = "freedrive"
+        goal.time = time
         self.lb_control_send_goal(goal)
         while not self.lb_control_goal_terminated:
             rclpy.spin_once(self)
@@ -305,10 +297,10 @@ class LegoBuilderPlannerNode(Node):
         self.set_TCP(TCP_BASE.tolist())
 
         # Enable freedrive
-        self.enable_freedrive()
+        self.freedrive(15.0)
 
         # Wait for user to drive to registration brick
-        self.goto_TCP(REGISTRATION_POSE_PRESET, time=15.0)
+        #self.goto_TCP(REGISTRATION_POSE_PRESET, time=15.0)
         _ = input("Press 'Enter' when registration brick is engaged")
 
         # Set the registration and plate frames
@@ -340,9 +332,7 @@ class LegoBuilderPlannerNode(Node):
         plate_to_reg.transform.rotation.w = reg_brick_orientation[3]
         self.tf_buffer_pub.sendTransform(plate_to_reg)
 
-        # Disable freedrive
-        T.sleep(1)
-        self.disable_freedrive()
+        T.sleep(1.0)
 
         # Disengage registration brick
         self.move_TCP([0.0, 0.0, STUD_HEIGHT], time=1.0)
@@ -409,9 +399,9 @@ class LegoBuilderPlannerNode(Node):
                          Rx, Ry, Rz]
 
         # Execute motions
-        self.goto_TCP(jog_pose)
+        self.goto_TCP(jog_pose, time=2.0)
 
-        self.goto_TCP(hover_pose)
+        self.goto_TCP(hover_pose, time=2.0)
 
         self.goto_TCP(approach_pose, time=5.0)
 

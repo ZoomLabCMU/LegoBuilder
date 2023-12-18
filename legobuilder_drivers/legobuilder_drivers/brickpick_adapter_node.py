@@ -14,7 +14,7 @@ from legobuilder_interfaces.srv import BrickpickCommand
 from legobuilder_drivers.brickpick_adapter import BrickPickAdapter
 
 ip_address = "172.26.185.38"
-ip_address = "192.168.2.100"
+#ip_address = "192.168.2.100"
 
 class BrickPickAdapterNode(Node):
     def __init__(self):

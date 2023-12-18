@@ -137,13 +137,8 @@ class LegoBuilderControlNode(Node):
         self.get_logger().info(f'Executing control goal...')
         goal = self.control_goal
         cmd = goal.cmd
-        if cmd == "enable_freedrive":
-            self.ur_controller.enable_freedrive()
-            result = LegobuilderCommand.Result()
-            goal_handle.succeed()
-            result.result = "Complete"
-        elif cmd == "disable_freedrive":
-            self.ur_controller.disable_freedrive()
+        if cmd == "freedrive":
+            self.ur_controller.freedrive(time=goal.time)
             result = LegobuilderCommand.Result()
             goal_handle.succeed()
             result.result = "Complete"
@@ -303,7 +298,6 @@ class LegoBuilderControlNode(Node):
             timeout = 1.5 * time
             self.ur_controller.move_ee(goal_ee_pose, time=time)
         else:
-            timeout = 30.0
             self.ur_controller.move_ee(goal_ee_pose)
         
         start_state = np.asarray(self.get_ee_pose())

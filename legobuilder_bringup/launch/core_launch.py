@@ -50,7 +50,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource([get_package_share_directory('ur_robot_driver'), '/launch/', 'ur_control.launch.py']),
         launch_arguments={'ur_type': 'ur5e',
                           'robot_ip': '192.168.1.12',
-                          'launch_rviz': 'false'}.items(),
+                          'launch_rviz': 'true'}.items(),
         condition=LaunchConfigurationNotEquals('sim', 'true')
     )
 

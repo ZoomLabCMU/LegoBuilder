@@ -128,33 +128,13 @@ class URController:
         freedrive_mode_string = String()
         
         freedrive_mode_string.data = 'def freedrive_control():\n    zero_ftsensor()\n'+\
-                                      '    freedrive_mode(freeAxes=[' + ','.join(str(axis) for axis in axes) + '], feature="tool")\n'+\
+                                      '    freedrive_mode()\n'+\
                                       '    sleep('+str(time)+')\n    end_freedrive_mode()\nend'
 
         self.ur_driver_pub.publish(freedrive_mode_string)
         self.ur_driver_pub.publish(freedrive_mode_string)
 
         T.sleep(time)
-
-        return True
-    
-    def enable_freedrive(self, axes=[1,1,1,1,1,1]):
-        freedrive_mode_string = String()
-
-        freedrive_mode_string.data = 'freedrive_mode(freeAxes=[' + ','.join(str(axis) for axis in axes) + '], feature="tool")'
-
-        self.ur_driver_pub.publish(freedrive_mode_string)
-        self.ur_driver_pub.publish(freedrive_mode_string)
-
-        return True
-
-    def disable_freedrive(self):
-        freedrive_mode_string = String()
-
-        freedrive_mode_string.data = 'end_freedrive_mode()'
-
-        self.ur_driver_pub.publish(freedrive_mode_string)
-        self.ur_driver_pub.publish(freedrive_mode_string)
 
         return True
 
