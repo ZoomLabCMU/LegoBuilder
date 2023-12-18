@@ -82,7 +82,7 @@ class BrickPick {
 
     double _Kp_l = 500;
     double _Ki_l = 0.0;
-    double _Kd_l = 600;
+    double _Kd_l = 1200;
     long _e_long = 0;
     long _e_long_prev = 0;
     long _de_long = 0;

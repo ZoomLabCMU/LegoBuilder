@@ -318,8 +318,9 @@ long BrickPick::get_long_plate_ctrl() {
 void BrickPick::set_long_target_brick(size_t brick) {
   double BRICK_HEIGHT_MM = 9.6;
   size_t BRICK_MAX = 5;
-  double HEIGHT_OFFSET_MM = -2.0;
-  brick = min(brick, BRICK_MAX);
+  size_t BRICK_MIN = 1;
+  double HEIGHT_OFFSET_MM = -1.4 - 3.0 - 1.0; // -(zero offset) -(finger rad) -(fudge factor)
+  brick = max(min(brick, BRICK_MAX), BRICK_MIN);
   set_long_target_mm(BRICK_HEIGHT_MM * brick + HEIGHT_OFFSET_MM);
 }
 

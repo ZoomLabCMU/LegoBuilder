@@ -26,8 +26,8 @@ from legobuilder_control.Controllers import BrickPickController
 # Constants
 STUD_HEIGHT = 0.0096 # m
 STUD_WIDTH = 0.008 # m
-TCP_BASE = np.asarray([-2 * STUD_WIDTH, 1 * STUD_WIDTH, 0.140, 0.0, 0.0, 0.0])
-REGISTRATION_POSE_PRESET = [0.250, -0.300, 0.150, 2.951, 1.077, 0.0]
+TCP_BASE = np.asarray([-2 * STUD_WIDTH, 1 * STUD_WIDTH, 0.1486, 0.0, 0.0, 0.0]) # Measured from CAD 12/17/2023
+REGISTRATION_POSE_PRESET = [0.250, -0.300, 0.150, 2.951, 1.077, 0.5]
 RAPID_PLANE = 0.300 # m
 
 class LegoBuilderPlannerNode(Node):
@@ -239,6 +239,57 @@ class LegoBuilderPlannerNode(Node):
         while not self.lb_control_goal_terminated:
             rclpy.spin_once(self)
 
+    def move_TCP_z(self, dz : float, wrench_thresh=None, time=None):
+        # in meters
+        self.get_logger().info(f'Move TCP along its z-axis {dz}')
+
+        TCP_trans = TransformStamped()
+        TCP_trans.header.frame_id = 'base'
+        TCP_trans.header.stamp = rclpy.time.Time().to_msg()
+        TCP_trans.child_frame_id = 'move_TCP_z'
+        [x, y, z, Rx, Ry, Rz] = self.get_ee_pose()
+        TCP_trans.transform.translation.x = x
+        TCP_trans.transform.translation.y = y
+        TCP_trans.transform.translation.z = z
+        [Qx, Qy, Qz, Qw] = utils.axis_angle_to_quaternion([Rx, Ry, Rz])
+        TCP_trans.transform.rotation.x = Qx
+        TCP_trans.transform.rotation.y = Qy
+        TCP_trans.transform.rotation.z = Qz
+        TCP_trans.transform.rotation.w = Qw
+
+        displacement_msg = Vector3Stamped()
+        displacement_msg.header.frame_id = 'move_TCP_z'
+        displacement_msg.header.stamp = rclpy.time.Time().to_msg()
+        displacement_msg.vector.x = 0.0
+        displacement_msg.vector.y = 0.0
+        displacement_msg.vector.z = dz
+        v = tf2_geometry_msgs.do_transform_vector3(
+            displacement_msg, 
+            TCP_trans
+        )
+
+        displacement = [v.vector.x, v.vector.y, v.vector.z]
+
+        goal = LegobuilderCommand.Goal()
+        goal.cmd = "move_TCP"
+        goal.displacement = displacement
+        goal.wrench_thresh = []
+        goal.use_ft = False
+        goal.time = 0.0
+        goal.use_time = False
+
+        if wrench_thresh is not None:
+            goal.use_ft = True
+            goal.wrench_thresh = wrench_thresh
+        if time is not None:
+            goal.time = time
+            goal.use_time = True
+
+        self.lb_control_send_goal(goal)
+
+        while not self.lb_control_goal_terminated:
+            rclpy.spin_once(self)
+
     ### Composite Commands ###
     def register_build_plate(self, reg_brick_location=[10, -10, 5], reg_brick_orientation=[0.0, 1.0, 0.0, 0.0]):
         '''
@@ -309,23 +360,62 @@ class LegoBuilderPlannerNode(Node):
         engage : Whether or not to engage the studs on the brick or hover over
         jog_height : Height of the jog plane in m
         '''
+        # Kinematics
+        target_pose_trans = TransformStamped()
+        target_pose_trans.header.frame_id = 'base'
+        target_pose_trans.header.stamp = rclpy.time.Time().to_msg()
+        target_pose_trans.child_frame_id = 'approach_target'
+        [x, y, z, Rx, Ry, Rz] = target_pose[:]
+        target_pose_trans.transform.translation.x = x
+        target_pose_trans.transform.translation.y = y
+        target_pose_trans.transform.translation.z = z
+        [Qx, Qy, Qz, Qw] = utils.axis_angle_to_quaternion([Rx, Ry, Rz])
+        target_pose_trans.transform.rotation.x = Qx
+        target_pose_trans.transform.rotation.y = Qy
+        target_pose_trans.transform.rotation.z = Qz
+        target_pose_trans.transform.rotation.w = Qw
+        self.tf_buffer_pub.sendTransform(target_pose_trans)
 
         # Rapid up to jog plane
         jog_pose = self.get_ee_pose()
         jog_pose[2] = jog_height
-        self.goto_TCP(jog_pose)
 
-        # Rapid over target pose
+        # Rapid directly over target in jog plane
         hover_pose = target_pose[:]
         hover_pose[2] = jog_height
+
+        # Slowly approach [0, 0, -STUD_HEIGHT] in target frame 
+        approach_pose_msg = PoseStamped()
+        approach_pose_msg.header.frame_id = 'approach_target'
+        approach_pose_msg.header.stamp = rclpy.time.Time().to_msg()
+        approach_pose_msg.pose.position.x = 0.0
+        approach_pose_msg.pose.position.y = 0.0
+        approach_pose_msg.pose.position.z = -STUD_HEIGHT
+        approach_pose_msg.pose.orientation.x = 0.0
+        approach_pose_msg.pose.orientation.y = 0.0
+        approach_pose_msg.pose.orientation.z = 0.0
+        approach_pose_msg.pose.orientation.w = 0.0
+        p = tf2_geometry_msgs.do_transform_pose_stamped(
+            approach_pose_msg, 
+            target_pose_trans
+        )
+        [Rx, Ry, Rz] = utils.quat_to_axis_angle([
+            p.pose.orientation.x, 
+            p.pose.orientation.y, 
+            p.pose.orientation.z, 
+            p.pose.orientation.w]
+        )
+        approach_pose = [p.pose.position.x, p.pose.position.y, p.pose.position.z,
+                         Rx, Ry, Rz]
+
+        # Execute motions
+        self.goto_TCP(jog_pose)
+
         self.goto_TCP(hover_pose)
 
-        # Approach the brick at the target pose, orientation aligned
-        approach_pose = target_pose[:]
-        approach_pose[2] += STUD_HEIGHT
         self.goto_TCP(approach_pose, time=5.0)
 
-        # Engage the brick slowly tangent to z-axis
+        # Engage the brick slowly along target z-axis
         if engage:
             self.goto_TCP(target_pose, time=2.0)
 
@@ -353,14 +443,14 @@ class LegoBuilderPlannerNode(Node):
         T.sleep(1.0)
 
         # Deploy the BrickPick moment plate
-        # if direction == 'long':
-        #     result_future = self.bp_controller.long_goto_brick(brick)
-        #     rclpy.spin_until_future_complete(self, result_future)
-        # elif direction == 'short':
-        #     result_future = self.bp_controller.short_goto_brick(brick)
-        #     rclpy.spin_until_future_complete(self, result_future)
-        # else:
-        #     raise NotImplementedError
+        if direction == 'long':
+            result_future = self.bp_controller.long_goto_brick(brick)
+            rclpy.spin_until_future_complete(self, result_future)
+        elif direction == 'short':
+            result_future = self.bp_controller.short_goto_brick(brick)
+            rclpy.spin_until_future_complete(self, result_future)
+        else:
+            raise NotImplementedError
         
         # Rotate about the axis direction 
         if direction == 'long':
@@ -395,28 +485,28 @@ class LegoBuilderPlannerNode(Node):
         T.sleep(1.0)
 
         # Pull up to complete pick
-        self.move_TCP(RELEASE_VEC, time=2.0)
+        self.move_TCP_z(-STUD_HEIGHT, time=2.0)
 
         # Re-zero moment plates
-        # if direction == 'long':
-        #     result_future = self.bp_controller.set_long_target_mm(0.0)
-        #     rclpy.spin_until_future_complete(self, result_future)
-        # elif direction == 'short':
-        #     result_future = self.bp_controller.set_short_target_mm(0.0)
-        #     rclpy.spin_until_future_complete(self, result_future)
-        # else:
-        #     raise NotImplementedError
+        if direction == 'long':
+            result_future = self.bp_controller.set_long_target_mm(2.0)
+            rclpy.spin_until_future_complete(self, result_future)
+        elif direction == 'short':
+            result_future = self.bp_controller.set_short_target_mm(2.0)
+            rclpy.spin_until_future_complete(self, result_future)
+        else:
+            raise NotImplementedError
 
     def deposit(self):
         '''
         Deposit the full end effector payload
         '''
 
-        # plunger_future = self.bp_controller.plunger_down()
-        self.move_TCP([0.0, 0.0, STUD_HEIGHT], time=1.0)
-        # rclpy.spin_until_future_complete(self, plunger_future)
-        # plunger_future = self.bp_controller.plunger_up()
-        # rclpy.spin_until_future_complete(self, plunger_future)
+        plunger_future = self.bp_controller.plunger_down()
+        self.move_TCP_z(-STUD_HEIGHT, time=1.0)
+        rclpy.spin_until_future_complete(self, plunger_future)
+        plunger_future = self.bp_controller.plunger_up()
+        rclpy.spin_until_future_complete(self, plunger_future)
         self.set_TCP(TCP_BASE.tolist())
 
     ### Perception ###
