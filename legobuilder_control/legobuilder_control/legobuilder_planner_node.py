@@ -14,7 +14,7 @@ import tf2_ros
 from tf2_ros import TransformStamped
 import tf2_geometry_msgs
 
-from geometry_msgs.msg import Wrench, PoseStamped, Transform
+from geometry_msgs.msg import Wrench, PoseStamped, Vector3Stamped
 from sensor_msgs.msg import Image
 
 from legobuilder_interfaces.action import LegobuilderCommand
@@ -27,7 +27,7 @@ from legobuilder_control.Controllers import BrickPickController
 STUD_HEIGHT = 0.0096 # m
 STUD_WIDTH = 0.008 # m
 TCP_BASE = np.asarray([-2 * STUD_WIDTH, 1 * STUD_WIDTH, 0.140, 0.0, 0.0, 0.0])
-REGISTRATION_POSE_PRESET = [0.250, -0.300, 0.150, np.pi, 0.0, 0.0]
+REGISTRATION_POSE_PRESET = [0.250, -0.300, 0.150, 2.951, 1.077, 0.0]
 RAPID_PLANE = 0.300 # m
 
 class LegoBuilderPlannerNode(Node):
@@ -309,22 +309,23 @@ class LegoBuilderPlannerNode(Node):
         engage : Whether or not to engage the studs on the brick or hover over
         jog_height : Height of the jog plane in m
         '''
-        # Move directly up to jog plane
+
+        # Rapid up to jog plane
         jog_pose = self.get_ee_pose()
         jog_pose[2] = jog_height
-        self.goto_TCP(jog_pose, time=1.0)
+        self.goto_TCP(jog_pose)
 
-        # Move directly over target pose
+        # Rapid over target pose
         hover_pose = target_pose[:]
         hover_pose[2] = jog_height
-        self.goto_TCP(hover_pose, time=1.0)
+        self.goto_TCP(hover_pose)
 
-        # Approach the brick at the target pose
+        # Approach the brick at the target pose, orientation aligned
         approach_pose = target_pose[:]
         approach_pose[2] += STUD_HEIGHT
-        self.goto_TCP(approach_pose, time=4.0)
+        self.goto_TCP(approach_pose, time=5.0)
 
-        # Engage the brick at the target pose
+        # Engage the brick slowly tangent to z-axis
         if engage:
             self.goto_TCP(target_pose, time=2.0)
 
@@ -338,59 +339,84 @@ class LegoBuilderPlannerNode(Node):
 
         TODO - Add a normal vector arg for pullback
         '''
+
         BRICK_MAX = 5
-        ROTATION_ANGLE_DEG = 30.0
+        ROTATION_ANGLE_DEG = 15.0
         RELEASE_VEC = [0.0, 0.0, STUD_HEIGHT]
 
-        brick = min(max(brick, 1), BRICK_MAX)
+        brick = min(max(brick, 0), BRICK_MAX)
 
         # Set the TCP to the brick corner
         TCP_offset = np.asarray([0.0, 0.0, brick * STUD_HEIGHT, 0.0, 0.0, 0.0])
         tcp_pose = (TCP_BASE + TCP_offset).tolist()
         self.set_TCP(tcp_pose)
+        T.sleep(1.0)
 
         # Deploy the BrickPick moment plate
-        if direction == 'long':
-            result_future = self.bp_controller.long_goto_brick(brick)
-            rclpy.spin_until_future_complete(self, result_future)
-        elif direction == 'short':
-            result_future = self.bp_controller.short_goto_brick(brick)
-            rclpy.spin_until_future_complete(self, result_future)
-        else:
-            raise NotImplementedError
+        # if direction == 'long':
+        #     result_future = self.bp_controller.long_goto_brick(brick)
+        #     rclpy.spin_until_future_complete(self, result_future)
+        # elif direction == 'short':
+        #     result_future = self.bp_controller.short_goto_brick(brick)
+        #     rclpy.spin_until_future_complete(self, result_future)
+        # else:
+        #     raise NotImplementedError
         
         # Rotate about the axis direction 
         if direction == 'long':
-            axis = [-1.0, 0.0, 0.0]
+            axis_TCP = [-1.0, 0.0, 0.0]
+            axis_TCP_msg = Vector3Stamped()
+            axis_TCP_msg.header.frame_id = 'tool0_controller'
+            axis_TCP_msg.header.stamp = rclpy.time.Time().to_msg()
+            axis_TCP_msg.vector.x = axis_TCP[0]
+            axis_TCP_msg.vector.y = axis_TCP[1]
+            axis_TCP_msg.vector.z = axis_TCP[2]
+            axis_base_msg = tf2_geometry_msgs.do_transform_vector3(
+                axis_TCP_msg, 
+                self.tf_buffer.lookup_transform('base', 'tool0_controller', rclpy.time.Time())
+            )
+            axis_base = [axis_base_msg.vector.x, axis_base_msg.vector.y, axis_base_msg.vector.z]
         elif direction == 'short':
-            axis = [0.0, -1.0, 0.0]
+            axis_TCP = [0.0, -1.0, 0.0]
+            axis_TCP_msg = Vector3Stamped()
+            axis_TCP_msg.header.frame_id = 'tool0_controller'
+            axis_TCP_msg.header.stamp = rclpy.time.Time().to_msg()
+            axis_TCP_msg.vector.x = axis_TCP[0]
+            axis_TCP_msg.vector.y = axis_TCP[1]
+            axis_TCP_msg.vector.z = axis_TCP[2]
+            axis_base_msg = tf2_geometry_msgs.do_transform_vector3(
+                axis_TCP_msg, 
+                self.tf_buffer.lookup_transform('base', 'tool0_controller', rclpy.time.Time())
+            )
+            axis_base = [axis_base_msg.vector.x, axis_base_msg.vector.y, axis_base_msg.vector.z]
         else:
             raise NotImplementedError
-        self.rotate_TCP_deg(axis, ROTATION_ANGLE_DEG)
+        self.rotate_TCP_deg(axis_base, ROTATION_ANGLE_DEG, time=2.0)
+        T.sleep(1.0)
 
         # Pull up to complete pick
-        self.move_TCP(RELEASE_VEC)
+        self.move_TCP(RELEASE_VEC, time=2.0)
 
         # Re-zero moment plates
-        if direction == 'long':
-            result_future = self.bp_controller.set_long_target_mm(0.0)
-            rclpy.spin_until_future_complete(self, result_future)
-        elif direction == 'short':
-            result_future = self.bp_controller.set_short_target_mm(0.0)
-            rclpy.spin_until_future_complete(self, result_future)
-        else:
-            raise NotImplementedError
+        # if direction == 'long':
+        #     result_future = self.bp_controller.set_long_target_mm(0.0)
+        #     rclpy.spin_until_future_complete(self, result_future)
+        # elif direction == 'short':
+        #     result_future = self.bp_controller.set_short_target_mm(0.0)
+        #     rclpy.spin_until_future_complete(self, result_future)
+        # else:
+        #     raise NotImplementedError
 
     def deposit(self):
         '''
         Deposit the full end effector payload
         '''
 
-        plunger_future = self.bp_controller.plunger_down()
-        self.move_TCP([0.0, 0.0, STUD_HEIGHT])
-        rclpy.spin_until_future_complete(self, plunger_future)
-        plunger_future = self.bp_controller.plunger_up()
-        rclpy.spin_until_future_complete(self, plunger_future)
+        # plunger_future = self.bp_controller.plunger_down()
+        self.move_TCP([0.0, 0.0, STUD_HEIGHT], time=1.0)
+        # rclpy.spin_until_future_complete(self, plunger_future)
+        # plunger_future = self.bp_controller.plunger_up()
+        # rclpy.spin_until_future_complete(self, plunger_future)
         self.set_TCP(TCP_BASE.tolist())
 
     ### Perception ###
@@ -454,6 +480,7 @@ def demo1(args=None):
     for trial in range(num_trials):
         print(F"### Beginning trial {trial} ###")
         
+        return_poses = []
         for skill in skills:
             T.sleep(2)
             # Unpack skill parameters
@@ -482,6 +509,8 @@ def demo1(args=None):
             return_pick_TCP_pose = utils.posestamped_to_TCP(return_pick_pose_base)
             return_place_TCP_pose = utils.posestamped_to_TCP(return_place_pose_base)
 
+            return_poses.append((return_pick_TCP_pose, return_place_TCP_pose))
+
             # Add frames to rviz
             put_pose_in_rviz(lb_planner_node.tf_buffer_pub, pick_pose_plate, f'pick_{n_bricks}')
             put_pose_in_rviz(lb_planner_node.tf_buffer_pub, place_pose_plate, f'place_{n_bricks}')
@@ -492,13 +521,25 @@ def demo1(args=None):
             lb_planner_node.approach(pick_TCP_pose)
 
             # Pick from the target stack
-            #lb_planner_node.pick(n_bricks, direction=direction)
+            lb_planner_node.pick(n_bricks, direction=direction)
 
             # Approach the deposit location
             lb_planner_node.approach(place_TCP_pose)
 
             # Deposit the brick stack
-            #lb_planner_node.deposit()
+            lb_planner_node.deposit()
+        
+        for i, (pick_pose, place_pose) in enumerate(return_poses):
+            brick = i + 1
+            direction = 'long'
+
+            lb_planner_node.approach(pick_pose)
+
+            lb_planner_node.pick(brick, direction)
+
+            lb_planner_node.approach(place_pose)
+
+            lb_planner_node.deposit()
 
     lb_planner_node.home()
 
