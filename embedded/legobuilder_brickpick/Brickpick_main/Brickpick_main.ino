@@ -87,6 +87,8 @@ void loop() {
 
 int parse_cmd(char buf[]) {
   char cmd_word = buf[0];
+  char display_buf[50] = {'\0'};
+  Serial.println(RX_BUF);
   switch(cmd_word) {
     case 'H': {// HELP
       Serial.println("-----Command Bank------");
@@ -109,10 +111,13 @@ int parse_cmd(char buf[]) {
       float q_dotCmd[4] = {0, 0, 0, 0};
       controller.cmdPos(qCmd);
       controller.cmdVel(q_dotCmd);
+      sprintf(display_buf, "GOTO (mm)\tLong: %d\tShort: %d\tPlunger%d", q1, q2, q3);
+      Serial.println(display_buf);
       break;
     }
     case 'P': { // PLOT
       plot = !plot;
+      Serial.println("TOGGLE PLOTTING: " + String(plot));
       break;
     }
     case 'B': {// BRICK GOTO
@@ -130,19 +135,32 @@ int parse_cmd(char buf[]) {
       plate = min(max(plate, 0), 1); // clip to safe bounds
       float qCmd = brick_locs[brick];
       controller.cmdPosSingle(qCmd, plate);
+      if (brick == 0) {
+        sprintf(display_buf, "GOTO BRICK\tPlate: LONG\tBrick: %d", brick);
+      } else {
+        sprintf(display_buf, "GOTO BRICK\tPlate: SHORT\tBrick: %d", brick);
+      }
+      Serial.println(display_buf);
       break;
     }
     case 'D': {// DEPOSIT
       controller.cmdPosSingle(8.0, 2);
+      Serial.println("DEPOSIT PAYLOAD");
       break;
     }
     case 'R': {// RAISE
       controller.cmdPosSingle(2.0, 2);
+      Serial.println("RAISE PLUNGER");
       break;
     }
     default: {//Unspecified Command Word
+      Serial.println("UNKNOWN COMMAND WORD (H for help)");
       return -1;
     }
+  }
+  // Clear rx buf
+  for (int i = 0; i < 50; i++) {
+    RX_BUF[i] = '\0';
   }
   return 0;
 }

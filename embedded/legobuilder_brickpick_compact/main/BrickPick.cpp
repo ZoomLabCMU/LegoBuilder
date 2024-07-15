@@ -245,6 +245,9 @@ void BrickPick::set_long_ctrl(long u) {
   uint16_t speed = abs(u);
   _long_motor->setSpeedFine(speed);
 
+  // THESIS HARDCODE: ENC MATCHES EXTENSION, CONTROL OPPOSITE:: REVERSE ALL CONTROLS ON LONG
+  u = -u;
+
   if (u > 0) {
     _long_motor->run(FORWARD);
   } else if (u < 0) {
@@ -367,8 +370,8 @@ void BrickPick::set_plunger_target(size_t i) {
 }
 
 void BrickPick::update_plunger_ctrls() {
-  int MAX_POS = 3300;
-  int MIN_POS = 2500;
+  int MAX_POS = 2950;
+  int MIN_POS = 500;
   int plunger_pos = analogRead(PLUNGER_POT);
   int plunger_target = (MAX_POS - MIN_POS) * _plunger_target + MIN_POS;
   int error = plunger_target - plunger_pos;
@@ -401,6 +404,18 @@ void BrickPick::update_plunger_ctrls() {
 
     return;
   }
-  _plunger_motor->run((plunger_ctrl < 0) ? FORWARD : BACKWARD);
+  _plunger_motor->run((plunger_ctrl > 0) ? FORWARD : BACKWARD);
   _plunger_motor->setSpeed(abs(plunger_ctrl));
+}
+
+int BrickPick::get_plunger_target() {
+  return _plunger_target;
+}
+
+int BrickPick::get_plunger_pos() {
+  return _plunger_positions[_plunger_buf_n - 1];
+}
+
+int BrickPick::get_plunger_ctrl() {
+  return _plunger_ctrls[_plunger_buf_n - 1];
 }

@@ -13,8 +13,9 @@ from rclpy.node import Node
 from legobuilder_interfaces.srv import BrickpickCommand
 from legobuilder_drivers.brickpick_adapter import BrickPickAdapter
 
-ip_address = "172.26.185.38"
-#ip_address = "192.168.2.100"
+ip_compact = "172.26.185.38"  # As registered on CMU-DEVICE
+ip_tactile = "172.26.190.213" # As registered on CMU-DEVICE
+ip_address = ip_tactile
 
 class BrickPickAdapterNode(Node):
     def __init__(self):

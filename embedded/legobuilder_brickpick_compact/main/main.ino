@@ -18,12 +18,12 @@
 #include "BrickPick.h"
 #include "Pins.h"
 // Create the motor shield object with the default I2C address
-Adafruit_MotorShield AFMS = Adafruit_MotorShield();
+Adafruit_MotorShield AFMS = Adafruit_MotorShield(0x61);
 
 // Select which 'port' M1, M2, M3 or M4. In this case, M1
-Adafruit_DCMotor *short_motor = AFMS.getMotor(4);
-Adafruit_DCMotor *long_motor = AFMS.getMotor(3);
-Adafruit_DCMotor *plunger_motor = AFMS.getMotor(2);
+Adafruit_DCMotor *short_motor = AFMS.getMotor(1);
+Adafruit_DCMotor *long_motor = AFMS.getMotor(2);
+Adafruit_DCMotor *plunger_motor = AFMS.getMotor(3);
 
 // Create brickpick class object
 BrickPick brickpick = BrickPick(short_motor, long_motor, plunger_motor);
@@ -109,16 +109,31 @@ bool update_UI_callback(BrickPick *brickpick) {
 
 // Function to enable serial plotting for PID tuning and debugging
 bool plotting_callback(BrickPick *brickpick) {
-  return true;
+  //return true;
   double x = brickpick->get_long_plate_pos_mm();
   double target = brickpick->get_long_plate_target_mm();
   long u_l = brickpick->get_long_plate_ctrl();
 
-  Serial.print("x:");
-  Serial.print(x);
+  int x_p = brickpick->get_plunger_pos();
+  int t_p = brickpick->get_plunger_target();
+  int u_p = brickpick->get_plunger_ctrl();
+
+
+  // Serial.print("x:");
+  // Serial.print(x);
+  // Serial.print(",");
+  // Serial.print("target:");
+  // Serial.print(target);
+
+  // PLUNGER
+  Serial.print("x_p: ");
+  Serial.print(x_p);
   Serial.print(",");
-  Serial.print("target:");
-  Serial.print(target);
+  Serial.print("t_p: ");
+  Serial.print(t_p);
+  Serial.print(",");
+  Serial.print("u_p: ");
+  Serial.print(u_p);
   Serial.println();
   return true;
 }

@@ -47,8 +47,8 @@ void show_main_display() {
   tft.fillScreen(ST77XX_BLACK);
   draw_payload();
   // Left is short, Right is long (L I know...)
-  tft.drawChar(15, 160, 'S', ST77XX_CYAN, ST77XX_BLACK, 3);
-  tft.drawChar(110, 160, 'L', ST77XX_CYAN, ST77XX_BLACK, 3);
+  tft.drawChar(15, 170, 'S', ST77XX_CYAN, ST77XX_BLACK, 3);
+  tft.drawChar(110, 170, 'L', ST77XX_CYAN, ST77XX_BLACK, 3);
   tft.setCursor(10, 230);
   tft.setTextColor(ST77XX_MAGENTA, ST77XX_BLACK);
   tft.setTextSize(1);
@@ -104,21 +104,21 @@ void draw_left_plate(int left_plate_pos) {
     // Extend plate
     // Erase previous finger zone
     int buffer = 15;
-    tft.fillRect(x0 + PLATE_WIDTH, left_plate_pos_prev - (2*FINGER_RAD-1) - 1 - buffer, FINGER_WIDTH, (2*FINGER_RAD-1) + buffer, ST77XX_BLACK);
+    tft.fillRect(x0 + PLATE_WIDTH, left_plate_pos_prev - (2*FINGER_RAD-1) - 1 - buffer, FINGER_WIDTH + 1, (2*FINGER_RAD-1) + buffer, ST77XX_BLACK);
     // Draw new plate to depth
     tft.fillRect(x0, y0 + left_plate_pos_prev, PLATE_WIDTH, left_plate_pos - left_plate_pos_prev, ST77XX_RED);
     // Draw new finger 
-    tft.fillRect(x0 + PLATE_WIDTH + FINGER_WIDTH - FINGER_RAD, left_plate_pos - (2*FINGER_RAD-1) - 2, FINGER_WIDTH-FINGER_RAD, 2*FINGER_RAD + 1, ST77XX_RED);
+    tft.fillRect(x0 + PLATE_WIDTH, left_plate_pos - (2*FINGER_RAD-1) - 2, FINGER_WIDTH-FINGER_RAD, 2*FINGER_RAD + 1, ST77XX_RED);
     tft.fillCircle(x0 + PLATE_WIDTH + FINGER_WIDTH - FINGER_RAD, left_plate_pos - FINGER_RAD - 1, FINGER_RAD, ST77XX_RED);
   } else {
     // Retract plate
     // Erase previous finger zone
     int buffer = 15;
-    tft.fillRect(x0 + PLATE_WIDTH, left_plate_pos_prev - (2*FINGER_RAD-1) + 1, FINGER_WIDTH, (2*FINGER_RAD-1) + buffer, ST77XX_BLACK);
+    tft.fillRect(x0 + PLATE_WIDTH, left_plate_pos_prev - (2*FINGER_RAD-1) + 1, FINGER_WIDTH + 1, (2*FINGER_RAD-1) + buffer, ST77XX_BLACK);
     // Erase previous plate to depth
     tft.fillRect(x0, y0 + left_plate_pos, PLATE_WIDTH, left_plate_pos_prev - left_plate_pos, ST77XX_BLACK);
     // Draw new finger
-    tft.fillRect(x0 + PLATE_WIDTH + FINGER_WIDTH - FINGER_RAD, left_plate_pos - (2*FINGER_RAD-1) - 2, FINGER_WIDTH-FINGER_RAD, 2*FINGER_RAD + 1, ST77XX_RED);
+    tft.fillRect(x0 + PLATE_WIDTH, left_plate_pos - (2*FINGER_RAD-1) - 2, FINGER_WIDTH-FINGER_RAD, 2*FINGER_RAD + 1, ST77XX_RED);
     tft.fillCircle(x0 + PLATE_WIDTH + FINGER_WIDTH - FINGER_RAD, left_plate_pos - FINGER_RAD - 1, FINGER_RAD, ST77XX_RED);
   }
   left_plate_pos_prev = left_plate_pos;

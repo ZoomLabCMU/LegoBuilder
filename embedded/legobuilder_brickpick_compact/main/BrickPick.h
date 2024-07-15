@@ -42,6 +42,10 @@ class BrickPick {
     long get_short_plate_ctrl();
     long get_long_plate_ctrl();
 
+    int get_plunger_pos();
+    int get_plunger_target();
+    int get_plunger_ctrl();
+
   private:
     // Objects
     Adafruit_DCMotor* _short_motor;
@@ -111,6 +115,7 @@ class BrickPick {
 
     void set_plunger_target(size_t i);
     void update_plunger_ctrls();
+
 };
 
 #endif
